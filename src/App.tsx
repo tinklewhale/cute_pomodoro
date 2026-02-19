@@ -33,7 +33,8 @@ function App() {
           addCoins, addSessionRecord, setPendingReward, unlockAchievement } = useGameStore();
   const { user, status: authStatus, signOut } = useAuthStore();
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
-          advanceCycle, advanceToFocus } = useTimerStore();
+          advanceCycle, advanceToFocus,
+          timeLeft, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
   const { roomId, broadcastTimerStatus, broadcastFocusSeconds } = useRoomStore();
 
   const [tab, setTab]               = useState<Tab>('home');
@@ -248,9 +249,56 @@ function App() {
         {/* Left panel — Character (desktop only, sticky) */}
         <aside className="character-panel">
           <CharacterView size={220} />
+
+          {/* Mini timer display */}
+          {timerStatus !== 'idle' && (
+            <div style={{ marginTop: 16, textAlign: 'center', width: '100%' }}>
+              {/* Time + mode */}
+              <div style={{
+                fontWeight: 900,
+                fontSize: '1.9rem',
+                color: 'var(--text-primary)',
+                lineHeight: 1,
+                fontVariantNumeric: 'tabular-nums',
+                letterSpacing: '-0.02em',
+              }}>
+                {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
+              </div>
+              <div style={{
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                color: timerMode === 'focus' ? 'var(--rose)' : timerMode === 'shortBreak' ? '#5EC49A' : '#5BA8E5',
+                marginTop: 4,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}>
+                {timerMode === 'focus' ? '집중' : timerMode === 'shortBreak' ? '짧은 휴식' : '긴 휴식'}
+                {timerStatus === 'paused' && ' · 일시정지'}
+              </div>
+              {/* Cycle dots */}
+              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 8 }}>
+                {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
+                  <motion.div
+                    key={i}
+                    animate={{ scale: i === cycleInSet && timerStatus === 'running' ? [1, 1.35, 1] : 1 }}
+                    transition={{ duration: 1.5, repeat: Infinity }}
+                    style={{
+                      width: 8, height: 8,
+                      borderRadius: '50%',
+                      background: i < cycleInSet
+                        ? (timerMode === 'focus' ? 'var(--rose)' : '#5EC49A')
+                        : 'rgba(0,0,0,0.10)',
+                      border: i < cycleInSet ? 'none' : '1.5px solid rgba(0,0,0,0.10)',
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           <div
             style={{
-              marginTop: 20,
+              marginTop: timerStatus !== 'idle' ? 12 : 20,
               padding: '8px 20px',
               borderRadius: 'var(--radius-full)',
               background: 'rgba(255, 255, 255, 0.6)',
