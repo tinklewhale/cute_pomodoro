@@ -94,33 +94,39 @@ const SettingsPanel: React.FC<SettingsProps> = ({ onClose }) => {
           zIndex: 200,
         }}
       />
-      <motion.div
-        initial={{ opacity: 0, scale: 0.92, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.92, y: 12 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+      {/* Centering wrapper — separate from motion.div so transforms don't conflict */}
+      <div
         style={{
           position: 'fixed',
           top: '50%', left: '50%',
           transform: 'translate(-50%, -50%)',
-          background: 'var(--cream)',
-          border: '2px solid rgba(255,255,255,0.9)',
-          borderRadius: 'var(--radius-xl)',
-          padding: '24px 28px',
-          boxShadow: 'var(--shadow-lg)',
-          width: 'min(320px, 90vw)',
           zIndex: 201,
+          width: 'min(320px, 90vw)',
         }}
       >
-      <h3 style={{ fontWeight: 900, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: 16 }}>⏱️ 타이머 설정</h3>
-      {numInput('집중 시간', focus, setFocus, 1, 90)}
-      {numInput('짧은 휴식', shortBrk, setShortBrk, 1, 30)}
-      {numInput('긴 휴식', longBrk, setLongBrk, 1, 60)}
-      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-        <button className="btn btn-ghost" style={{ flex: 1, padding: '8px' }} onClick={onClose}>취소</button>
-        <button className="btn btn-primary" style={{ flex: 1, padding: '8px' }} onClick={handleSave}>저장</button>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.92, y: 12 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.92, y: 12 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+          style={{
+            background: 'var(--cream)',
+            border: '2px solid rgba(255,255,255,0.9)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '24px 28px',
+            boxShadow: 'var(--shadow-lg)',
+          }}
+        >
+          <h3 style={{ fontWeight: 900, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: 16 }}>⏱️ 타이머 설정</h3>
+          {numInput('집중 시간', focus, setFocus, 1, 90)}
+          {numInput('짧은 휴식', shortBrk, setShortBrk, 1, 30)}
+          {numInput('긴 휴식', longBrk, setLongBrk, 1, 60)}
+          <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+            <button className="btn btn-ghost" style={{ flex: 1, padding: '8px' }} onClick={onClose}>취소</button>
+            <button className="btn btn-primary" style={{ flex: 1, padding: '8px' }} onClick={handleSave}>저장</button>
+          </div>
+        </motion.div>
       </div>
-    </motion.div>
     </>
   );
 };

@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Home, Users, CalendarDays, Backpack } from 'lucide-react';
 import { useGameStore } from './features/game/useGameStore';
+import { useAuthStore } from './features/auth/useAuthStore';
 import { CharacterSelect } from './components/character/CharacterSelect';
 import { CharacterView } from './components/character/CharacterView';
 import { TimerDisplay } from './components/timer/TimerDisplay';
@@ -10,6 +11,7 @@ import { RoomView } from './components/room/RoomView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { InventoryView } from './components/inventory/InventoryView';
 import { ShopView } from './components/shop/ShopView';
+import { AuthModal } from './components/auth/AuthModal';
 import { playClick } from './utils/audio';
 
 type Tab = 'home' | 'room' | 'calendar' | 'inventory';
@@ -22,11 +24,29 @@ const NAV_TABS: { id: Tab; labelKo: string; icon: React.ReactNode }[] = [
 ];
 
 function App() {
-  const { hasChosenCharacter, coins, selectedCharacter, nickname } = useGameStore();
-  const [tab, setTab]           = useState<Tab>('home');
-  const [showShop, setShowShop] = useState(false);
+  const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId } = useGameStore();
+  const { user, status: authStatus, signOut } = useAuthStore();
 
-  // ── Onboarding gate ───────────────────────────────────
+  const [tab, setTab]               = useState<Tab>('home');
+  const [showShop, setShowShop]     = useState(false);
+  const [showAuth, setShowAuth]     = useState(false);
+
+  // ── Auth init — bridge auth events → game store ──────────
+  useEffect(() => {
+    const unsubscribe = useAuthStore.getState().init((userId) => {
+      void loadFromCloud(userId);
+    });
+    return unsubscribe;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSignOut = async () => {
+    playClick();
+    await signOut();
+    clearUserId();
+  };
+
+  // ── Onboarding gate ───────────────────────────────────────
   if (!hasChosenCharacter) {
     return <CharacterSelect />;
   }
@@ -80,7 +100,7 @@ function App() {
           </div>
         </div>
 
-        {/* Right: coins + shop */}
+        {/* Right: coins + shop + auth */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div className="coin-display">
             🪙 {coins}
@@ -94,6 +114,46 @@ function App() {
           >
             🛍️ 상점
           </motion.button>
+
+          {/* Guest: show login button */}
+          {authStatus === 'guest' && (
+            <motion.button
+              className="btn btn-ghost"
+              style={{ padding: '7px 12px', fontSize: '0.82rem' }}
+              onClick={() => { playClick(); setShowAuth(true); }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              ☁️ 로그인
+            </motion.button>
+          )}
+
+          {/* Authenticated: show avatar + logout */}
+          {authStatus === 'authenticated' && user && (
+            <motion.button
+              className="btn btn-ghost"
+              style={{ padding: '6px 10px', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: 6 }}
+              onClick={handleSignOut}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title={user.email ?? ''}
+            >
+              <div
+                style={{
+                  width: 22, height: 22,
+                  borderRadius: '50%',
+                  background: 'var(--rose-grad)',
+                  color: '#fff',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.68rem', fontWeight: 900,
+                  flexShrink: 0,
+                }}
+              >
+                {(user.email ?? 'U')[0].toUpperCase()}
+              </div>
+              로그아웃
+            </motion.button>
+          )}
         </div>
       </header>
 
@@ -254,6 +314,19 @@ function App() {
 
       {/* Item reward popup (focus cycle complete) */}
       <ItemRewardPopup />
+
+      {/* Auth modal */}
+      <AnimatePresence>
+        {showAuth && (
+          <AuthModal
+            onClose={() => setShowAuth(false)}
+            onSuccess={(userId) => {
+              void loadFromCloud(userId);
+              setShowAuth(false);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* Shop slide-up sheet */}
       <AnimatePresence>
