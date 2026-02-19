@@ -1,63 +1,114 @@
 import React from 'react';
-import { useGameStore } from '../../features/game/useGameStore';
 import { motion } from 'framer-motion';
+import { useGameStore } from '../../features/game/useGameStore';
+import { getItemById } from '../../data/items';
 
-export const CharacterView: React.FC = () => {
-  const { equipped } = useGameStore();
+interface CharacterViewProps {
+  size?: number;
+  /** If true, skip the floating animation (for compact previews) */
+  staticMode?: boolean;
+}
+
+export const CharacterView: React.FC<CharacterViewProps> = ({ size = 200, staticMode = false }) => {
+  const { selectedCharacter, equipped } = useGameStore();
+
+  const bgItem   = equipped.background ? getItemById(equipped.background) : null;
+  const accItem  = equipped.accessory  ? getItemById(equipped.accessory)  : null;
+  const skinItem = equipped.skin       ? getItemById(equipped.skin)       : null;
+
+  const bgGradient = bgItem?.assetData ?? 'linear-gradient(160deg, var(--lavender-light) 0%, var(--cream-dark) 100%)';
+  const skinFilter  = skinItem?.type === 'skin' ? skinItem.assetData : undefined;
 
   return (
-    <div className="relative w-64 h-64 mx-auto mb-8 flex items-center justify-center">
-      {/* Background/Aura */}
-      <motion.div 
-        animate={{ scale: [1, 1.05, 1] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute inset-0 bg-gradient-to-tr from-blue-100 to-purple-100 rounded-full opacity-50 blur-xl"
+    <div
+      style={{
+        position: 'relative',
+        width: size,
+        height: size,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      {/* Background glow circle */}
+      <motion.div
+        animate={staticMode ? {} : { scale: [1, 1.06, 1] }}
+        transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+        style={{
+          position: 'absolute',
+          inset: '5%',
+          borderRadius: '50%',
+          background: bgGradient,
+          boxShadow: '0 8px 32px rgba(196, 168, 232, 0.30)',
+        }}
       />
 
-      {/* Base Character (Cat Placeholder) */}
-      <div className="relative z-10 w-40 h-40 bg-white rounded-full shadow-lg flex items-center justify-center overflow-hidden border-4 border-white">
-        {/* Simple SVG Cat */}
-        <svg viewBox="0 0 100 100" className="w-full h-full">
-            {/* Body */}
-            <circle cx="50" cy="60" r="30" fill="#f0f0f0" />
-            
-            {/* Ears */}
-            <path d="M 30 35 L 20 10 L 40 30 Z" fill="#f0f0f0" />
-            <path d="M 70 35 L 80 10 L 60 30 Z" fill="#f0f0f0" />
-            
-            {/* Eyes */}
-            <circle cx="40" cy="55" r="3" fill="#333" />
-            <circle cx="60" cy="55" r="3" fill="#333" />
-            
-            {/* Mouth */}
-            <path d="M 45 65 Q 50 70 55 65" stroke="#333" strokeWidth="2" fill="none" />
+      {/* Soft outer halo */}
+      <div style={{
+        position: 'absolute',
+        inset: '-4%',
+        borderRadius: '50%',
+        background: bgGradient,
+        opacity: 0.25,
+        filter: 'blur(16px)',
+      }} />
 
-             {/* Dynamic Equipped Items (Simple overlays) */}
-             {equipped.accessory === 'acc_glasses' && ( 
-                 <g>
-                     <circle cx="40" cy="55" r="6" stroke="black" strokeWidth="2" fill="none" />
-                     <circle cx="60" cy="55" r="6" stroke="black" strokeWidth="2" fill="none" />
-                     <line x1="46" y1="55" x2="54" y2="55" stroke="black" strokeWidth="2" />
-                 </g>
-             )}
+      {/* Character PNG */}
+      <motion.div
+        animate={staticMode ? {} : { y: [0, -8, 0] }}
+        transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+        style={{
+          position: 'relative',
+          zIndex: 2,
+          width: '80%',
+          height: '80%',
+        }}
+      >
+        <img
+          src={`/characters/${selectedCharacter}.png`}
+          alt={selectedCharacter}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'contain',
+            filter: skinFilter,
+            imageRendering: 'auto',
+          }}
+          draggable={false}
+        />
+      </motion.div>
 
-            {equipped.accessory === 'acc_cap' && (
-                 <path d="M 20 20 L 80 20 L 80 10 Q 50 0 20 10 Z" fill="#3498db" />
-            )}
+      {/* Accessory emoji overlay (top-right) */}
+      {accItem && (
+        <motion.div
+          initial={{ scale: 0 }}
+          animate={{ scale: 1 }}
+          style={{
+            position: 'absolute',
+            top: '6%',
+            right: '6%',
+            fontSize: size * 0.18,
+            zIndex: 3,
+            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.15))',
+          }}
+        >
+          {accItem.emoji}
+        </motion.div>
+      )}
 
-            {equipped.accessory === 'acc_crown' && (
-                 <path d="M 30 20 L 40 10 L 50 25 L 60 10 L 70 20 L 70 30 L 30 30 Z" fill="#f1c40f" />
-            )}
-
-            {equipped.top === 'outfit_ninja' && (
-                 <path d="M 20 60 Q 50 100 80 60" fill="#2c3e50" opacity="0.8" />
-            )}
-        </svg>
-
-      </div>
-      
-      {/* Platform/Shadow */}
-      <div className="absolute bottom-10 w-32 h-4 bg-black/10 blur-md rounded-full" />
+      {/* Ground shadow */}
+      <div style={{
+        position: 'absolute',
+        bottom: '2%',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        width: '55%',
+        height: size * 0.04,
+        background: 'rgba(61, 44, 44, 0.10)',
+        borderRadius: '50%',
+        filter: 'blur(6px)',
+        zIndex: 1,
+      }} />
     </div>
   );
 };

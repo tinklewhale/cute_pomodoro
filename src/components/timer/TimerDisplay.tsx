@@ -1,179 +1,463 @@
 import React, { useEffect } from 'react';
-import { useTimerStore, type TimerMode } from '../../features/timer/useTimerStore';
-import { Play, Pause, RotateCcw } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { playClick, playNotification } from '../../utils/audio';
+import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
+import { useTimerStore, type TimerMode } from '../../features/timer/useTimerStore';
 import { useGameStore } from '../../features/game/useGameStore';
+import { useRoomStore } from '../../features/room/useRoomStore';
+import { CharacterView } from '../character/CharacterView';
+import { playClick, playNotification } from '../../utils/audio';
+import { rollItemBox } from '../../data/items';
+import type { MemberTimerStatus } from '../../features/room/useRoomStore';
 
-const formatTime = (seconds: number) => {
-  const mins = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+// ── Helpers ────────────────────────────────────────────────
+const pad = (n: number) => String(n).padStart(2, '0');
+const formatTime = (s: number) => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+
+const MODE_CONFIG = {
+  focus: {
+    labelKo:       '집중',
+    statusRunning: '집중 중...',
+    statusPaused:  '일시정지',
+    statusIdle:    '준비',
+    statusCompleted: '완료!',
+    gradStart: '#FF6B8A',
+    gradEnd:   '#E8526F',
+    trackColor: 'rgba(255, 107, 138, 0.12)',
+  },
+  shortBreak: {
+    labelKo:       '짧은 휴식',
+    statusRunning: '휴식 중 ☕',
+    statusPaused:  '일시정지',
+    statusIdle:    '휴식 준비',
+    statusCompleted: '휴식 완료!',
+    gradStart: '#7EDBB7',
+    gradEnd:   '#5EC49A',
+    trackColor: 'rgba(126, 219, 183, 0.12)',
+  },
+  longBreak: {
+    labelKo:       '긴 휴식',
+    statusRunning: '충분히 쉬어요 🌿',
+    statusPaused:  '일시정지',
+    statusIdle:    '휴식 준비',
+    statusCompleted: '휴식 완료!',
+    gradStart: '#89C4F4',
+    gradEnd:   '#5BA8E5',
+    trackColor: 'rgba(137, 196, 244, 0.12)',
+  },
 };
 
-const MODE_COLORS = {
-  focus: 'var(--color-focus-gradient)',
-  shortBreak: 'var(--color-break-gradient)',
-  longBreak: 'var(--color-long-break-gradient)',
-};
+const RADIUS = 110;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
-const MODE_LABELS: Record<TimerMode, string> = {
-  focus: 'Focus Time',
-  shortBreak: 'Short Break',
-  longBreak: 'Long Break',
-};
+// ── Settings Panel ──────────────────────────────────────────
+interface SettingsProps {
+  onClose: () => void;
+}
 
-export const TimerDisplay: React.FC = () => {
-  const { 
-    timeLeft, 
-    mode, 
-    status, 
-    tick, 
-    setStatus, 
-    resetTimer, 
-    setMode,
-    incrementCycles,
-    focusDuration,
-    shortBreakDuration,
-    longBreakDuration
-  } = useTimerStore();
+const SettingsPanel: React.FC<SettingsProps> = ({ onClose }) => {
+  const { focusDuration, shortBreakDuration, longBreakDuration, setDurations } = useTimerStore();
+  const [focus, setFocus]           = React.useState(Math.floor(focusDuration / 60));
+  const [shortBrk, setShortBrk]    = React.useState(Math.floor(shortBreakDuration / 60));
+  const [longBrk, setLongBrk]      = React.useState(Math.floor(longBreakDuration / 60));
 
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (status === 'running') {
-      interval = setInterval(tick, 1000);
-    }
-     // @ts-ignore
-    return () => clearInterval(interval);
-  }, [status, tick]);
-
-  const { addCoins } = useGameStore();
-
-  useEffect(() => {
-    if (status === 'completed') {
-      playNotification();
-      if (mode === 'focus') {
-        addCoins(100); // Reward for focus
-        incrementCycles(); 
-      }
-    }
-  }, [status, mode, addCoins]);
-
-  const toggleTimer = () => {
-    playClick();
-    if (status === 'running') setStatus('paused');
-    else setStatus('running');
+  const handleSave = () => {
+    setDurations(focus * 60, shortBrk * 60, longBrk * 60);
+    onClose();
   };
 
-  const handleModeChange = (newMode: TimerMode) => {
-      setMode(newMode);
-  };
-
-  const totalTime = mode === 'focus' ? focusDuration : mode === 'shortBreak' ? shortBreakDuration : longBreakDuration;
-  const progress = ((totalTime - timeLeft) / totalTime) * 100;
+  const numInput = (label: string, val: number, onChange: (v: number) => void, min = 1, max = 90) => (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>
+        {label}
+      </label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button className="btn btn-ghost btn-icon" onClick={() => onChange(Math.max(min, val - 1))}>-</button>
+        <span style={{ fontWeight: 900, fontSize: '1.2rem', minWidth: 30, textAlign: 'center', color: 'var(--text-primary)' }}>{val}</span>
+        <button className="btn btn-ghost btn-icon" onClick={() => onChange(Math.min(max, val + 1))}>+</button>
+        <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>분</span>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 w-full max-w-md">
-       {/* Mode Selectors */}
-       <div className="flex gap-4 mb-8 p-1 bg-white/50 backdrop-blur-sm rounded-full border border-white/20">
-        {(['focus', 'shortBreak', 'longBreak'] as TimerMode[]).map((m) => (
-          <button
-            key={m}
-            onClick={() => handleModeChange(m)}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all duration-300 ${
-              mode === m 
-                ? 'bg-white shadow-sm text-gray-800 scale-105' 
-                : 'text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {MODE_LABELS[m]}
-          </button>
-        ))}
+    <>
+      {/* Backdrop */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(61, 44, 44, 0.25)',
+          backdropFilter: 'blur(3px)',
+          zIndex: 200,
+        }}
+      />
+      <motion.div
+        initial={{ opacity: 0, scale: 0.92, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.92, y: 12 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+        style={{
+          position: 'fixed',
+          top: '50%', left: '50%',
+          transform: 'translate(-50%, -50%)',
+          background: 'var(--cream)',
+          border: '2px solid rgba(255,255,255,0.9)',
+          borderRadius: 'var(--radius-xl)',
+          padding: '24px 28px',
+          boxShadow: 'var(--shadow-lg)',
+          width: 'min(320px, 90vw)',
+          zIndex: 201,
+        }}
+      >
+      <h3 style={{ fontWeight: 900, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: 16 }}>⏱️ 타이머 설정</h3>
+      {numInput('집중 시간', focus, setFocus, 1, 90)}
+      {numInput('짧은 휴식', shortBrk, setShortBrk, 1, 30)}
+      {numInput('긴 휴식', longBrk, setLongBrk, 1, 60)}
+      <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+        <button className="btn btn-ghost" style={{ flex: 1, padding: '8px' }} onClick={onClose}>취소</button>
+        <button className="btn btn-primary" style={{ flex: 1, padding: '8px' }} onClick={handleSave}>저장</button>
+      </div>
+    </motion.div>
+    </>
+  );
+};
+
+// ── Main Timer Component ────────────────────────────────────
+export const TimerDisplay: React.FC = () => {
+  const {
+    timeLeft, mode, status, cyclesCompleted, cycleInSet, cyclesUntilLongBreak,
+    focusDuration, shortBreakDuration, longBreakDuration,
+    focusStartTime,
+    setMode, setStatus, resetTimer, tick, advanceCycle, advanceToFocus,
+  } = useTimerStore();
+
+  const { addCoins, selectedCharacter, setPendingReward, unlockAchievement, addSessionRecord } = useGameStore();
+  const { roomId, broadcastTimerStatus } = useRoomStore();
+  const userId = React.useRef(`user_${Math.random().toString(36).slice(2, 10)}`);
+
+  const [showSettings, setShowSettings] = React.useState(false);
+
+  const cfg = MODE_CONFIG[mode];
+  const totalTime =
+    mode === 'focus'      ? focusDuration :
+    mode === 'shortBreak' ? shortBreakDuration :
+    longBreakDuration;
+
+  const progress     = totalTime > 0 ? (totalTime - timeLeft) / totalTime : 0;
+  const dashOffset   = CIRCUMFERENCE * (1 - progress);
+  const statusLabel  =
+    status === 'running'   ? cfg.statusRunning :
+    status === 'paused'    ? cfg.statusPaused  :
+    status === 'completed' ? cfg.statusCompleted :
+    cfg.statusIdle;
+
+  // Tick interval
+  useEffect(() => {
+    if (status !== 'running') return;
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [status, tick]);
+
+  // Handle completion
+  useEffect(() => {
+    if (status !== 'completed') return;
+
+    playNotification();
+
+    if (mode === 'focus') {
+      // Reward coins
+      addCoins(50);
+
+      // Record session
+      if (focusStartTime) {
+        addSessionRecord({
+          startedAt:       focusStartTime.toISOString(),
+          durationSeconds: focusDuration,
+        });
+      }
+
+      // First session achievement
+      unlockAchievement('ach_first');
+
+      // Check time-based achievements
+      const hour = new Date().getHours();
+      if (hour >= 0 && hour < 6)  unlockAchievement('ach_night');
+      if (hour >= 4 && hour < 6)  unlockAchievement('ach_dawn');
+
+      // Set pending reward (item box during break)
+      const reward = rollItemBox(selectedCharacter);
+      setPendingReward(reward);
+
+      // Auto-advance to break
+      setTimeout(() => advanceCycle(), 1200);
+    } else {
+      // Break completed → back to focus
+      setTimeout(() => advanceToFocus(), 1000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
+
+  // Broadcast timer status to room
+  useEffect(() => {
+    if (!roomId) return;
+    const mapped: MemberTimerStatus =
+      status === 'running'   ? 'running'   :
+      status === 'paused'    ? 'paused'    :
+      status === 'completed' ? 'completed' : 'idle';
+    void broadcastTimerStatus(userId.current, mapped);
+  }, [status, roomId, broadcastTimerStatus]);
+
+  const handleToggle = () => {
+    playClick();
+    if (status === 'completed') return;
+    setStatus(status === 'running' ? 'paused' : 'running');
+  };
+
+  const handleReset = () => {
+    playClick();
+    resetTimer();
+  };
+
+  const handleModeChange = (m: TimerMode) => {
+    playClick();
+    setMode(m);
+  };
+
+  // ── Mode tab labels
+  const MODES: { id: TimerMode; label: string }[] = [
+    { id: 'focus',      label: '집중' },
+    { id: 'shortBreak', label: '짧은 휴식' },
+    { id: 'longBreak',  label: '긴 휴식' },
+  ];
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        padding: '20px 16px 16px',
+        width: '100%',
+        maxWidth: 400,
+        margin: '0 auto',
+      }}
+    >
+      {/* Mobile compact character */}
+      <div className="mobile-char-preview" style={{ marginBottom: 0 }}>
+        <CharacterView size={100} staticMode />
       </div>
 
-      {/* Timer Circle */}
-      <div className="relative w-72 h-72 flex items-center justify-center mb-8">
-        {/* Background Circle */}
-        <svg className="absolute w-full h-full transform -rotate-90">
-          <circle
-            cx="144"
-            cy="144"
-            r="130"
-            stroke="rgba(0,0,0,0.05)"
-            strokeWidth="12"
-            fill="none"
-          />
-          <circle
-            cx="144"
-            cy="144"
-            r="130"
-            stroke="url(#gradient)" 
-            strokeWidth="12"
-            fill="none"
-            strokeDasharray={2 * Math.PI * 130}
-            strokeDashoffset={2 * Math.PI * 130 * (1 - progress / 100)} // Inverted logic for filling up? Or depleting? Usually timers deplete. Let's make it deplete.
-             // Actually, usually progress bars fill up or deplete. Let's make it fill up for "Time Elapsed" or deplete for "Time Left".
-             // Let's go with Depleting: Full circle at start.
-             // StrokeDashoffset: 0 = Full.
-             // Value should go from 0 to MAX.
-             // If we want it to shrink: offset increases.
-             style={{
-                 transition: 'stroke-dashoffset 1s linear',
-                 strokeLinecap: 'round' 
-             }}
-          />
-           <defs>
-            <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              {mode === 'focus' && <>
-                <stop offset="0%" stopColor="#ff6b6b" />
-                <stop offset="100%" stopColor="#ee5253" />
-              </>}
-              {mode === 'shortBreak' && <>
-                <stop offset="0%" stopColor="#4ecdc4" />
-                <stop offset="100%" stopColor="#22a6b3" />
-              </>}
-               {mode === 'longBreak' && <>
-                <stop offset="0%" stopColor="#45b7d1" />
-                <stop offset="100%" stopColor="#2980b9" />
-              </>}
+      {/* Mode tabs */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 4,
+          padding: '4px',
+          background: 'rgba(255, 255, 255, 0.6)',
+          backdropFilter: 'blur(12px)',
+          borderRadius: 'var(--radius-full)',
+          border: '1.5px solid rgba(255,255,255,0.85)',
+          marginBottom: 24,
+          marginTop: 8,
+        }}
+      >
+        {MODES.map((m) => {
+          const isActive = mode === m.id;
+          return (
+            <motion.button
+              key={m.id}
+              onClick={() => handleModeChange(m.id)}
+              style={{
+                padding: '7px 14px',
+                borderRadius: 'var(--radius-full)',
+                fontSize: '0.78rem',
+                fontWeight: 800,
+                border: 'none',
+                cursor: 'pointer',
+                background: isActive ? '#fff' : 'transparent',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                boxShadow: isActive ? 'var(--shadow-xs)' : 'none',
+                transition: 'all 0.2s',
+              }}
+              whileHover={!isActive ? { color: 'var(--text-secondary)' } : {}}
+              whileTap={{ scale: 0.95 }}
+            >
+              {m.label}
+            </motion.button>
+          );
+        })}
+      </div>
+
+      {/* SVG Timer Circle */}
+      <div
+        style={{
+          position: 'relative',
+          width: 280,
+          height: 280,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: 24,
+        }}
+      >
+        <svg
+          width={280}
+          height={280}
+          style={{ position: 'absolute', transform: 'rotate(-90deg)' }}
+        >
+          <defs>
+            <linearGradient id={`grad-${mode}`} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%"   stopColor={cfg.gradStart} />
+              <stop offset="100%" stopColor={cfg.gradEnd}   />
             </linearGradient>
           </defs>
+          {/* Track */}
+          <circle
+            cx={140} cy={140} r={RADIUS}
+            fill="none"
+            stroke={cfg.trackColor}
+            strokeWidth={14}
+          />
+          {/* Progress */}
+          <circle
+            cx={140} cy={140} r={RADIUS}
+            fill="none"
+            stroke={`url(#grad-${mode})`}
+            strokeWidth={14}
+            strokeLinecap="round"
+            strokeDasharray={CIRCUMFERENCE}
+            strokeDashoffset={dashOffset}
+            style={{ transition: 'stroke-dashoffset 1s linear' }}
+          />
         </svg>
 
-        {/* Time Text */}
-        <div className="flex flex-col items-center z-10">
-            <motion.div 
-                key={timeLeft}
-                initial={{ opacity: 0.5, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-6xl font-bold tracking-tighter"
-                style={{ color: 'var(--color-text-primary)' }}
-            >
-                {formatTime(timeLeft)}
-            </motion.div>
-            <div className="text-sm font-medium uppercase tracking-widest mt-2 text-gray-400">
-                {status === 'running' ? 'Focusing...' : status === 'paused' ? 'Paused' : 'Ready'}
-            </div>
+        {/* Center content */}
+        <div style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+          <motion.div
+            key={Math.floor(timeLeft / 60)}
+            initial={{ opacity: 0.5, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.3 }}
+            style={{
+              fontSize: '3.6rem',
+              fontWeight: 900,
+              color: 'var(--text-primary)',
+              lineHeight: 1,
+              letterSpacing: '-0.02em',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {formatTime(timeLeft)}
+          </motion.div>
+          <div
+            style={{
+              fontSize: '0.75rem',
+              fontWeight: 700,
+              color: 'var(--text-muted)',
+              marginTop: 6,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+            }}
+          >
+            {statusLabel}
+          </div>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-6">
-        <button 
-            onClick={resetTimer}
-            className="p-4 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition-colors"
-            title="Reset"
-        >
-            <RotateCcw size={24} />
-        </button>
+      {/* Cycle dots */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
+        {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => {
+          const filled = i < cycleInSet;
+          return (
+            <motion.div
+              key={i}
+              animate={{ scale: i === cycleInSet && status === 'running' ? [1, 1.3, 1] : 1 }}
+              transition={{ duration: 1.5, repeat: Infinity }}
+              style={{
+                width: 10,
+                height: 10,
+                borderRadius: '50%',
+                background: filled
+                  ? `linear-gradient(135deg, ${cfg.gradStart}, ${cfg.gradEnd})`
+                  : 'rgba(0,0,0,0.08)',
+                border: filled ? 'none' : '1.5px solid rgba(0,0,0,0.10)',
+              }}
+            />
+          );
+        })}
+      </div>
 
-        <button 
-            onClick={toggleTimer}
-            className="p-6 rounded-full text-white shadow-lg transform transition-all hover:scale-105 active:scale-95"
-            style={{ background: MODE_COLORS[mode] }}
+      {/* Total cycles */}
+      <div
+        style={{
+          fontSize: '0.75rem',
+          fontWeight: 700,
+          color: 'var(--text-muted)',
+          marginBottom: 20,
+        }}
+      >
+        총 완료 세션: {cyclesCompleted}
+      </div>
+
+      {/* Controls */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, position: 'relative' }}>
+        {/* Settings */}
+        <motion.button
+          className="btn btn-ghost btn-icon"
+          onClick={() => { playClick(); setShowSettings(!showSettings); }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.93 }}
         >
-            {status === 'running' ? <Pause size={32} fill="white" /> : <Play size={32} fill="white" className="ml-1" />}
-        </button>
+          <Settings size={18} />
+        </motion.button>
+
+        {showSettings && (
+          <SettingsPanel onClose={() => setShowSettings(false)} />
+        )}
+
+        {/* Reset */}
+        <motion.button
+          className="btn btn-ghost btn-icon"
+          onClick={handleReset}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.93 }}
+          style={{ width: 48, height: 48 }}
+        >
+          <RotateCcw size={20} />
+        </motion.button>
+
+        {/* Play / Pause */}
+        <motion.button
+          onClick={handleToggle}
+          disabled={status === 'completed'}
+          whileHover={{ scale: 1.06 }}
+          whileTap={{ scale: 0.94 }}
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: '50%',
+            background: `linear-gradient(135deg, ${cfg.gradStart}, ${cfg.gradEnd})`,
+            border: 'none',
+            cursor: status === 'completed' ? 'not-allowed' : 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 8px 28px ${cfg.gradStart}55`,
+            opacity: status === 'completed' ? 0.6 : 1,
+          }}
+        >
+          {status === 'running'
+            ? <Pause size={30} color="#fff" fill="#fff" />
+            : <Play  size={30} color="#fff" fill="#fff" style={{ marginLeft: 3 }} />
+          }
+        </motion.button>
+
+        {/* Spacer for symmetry */}
+        <div style={{ width: 48, height: 48 }} />
+        <div style={{ width: 48, height: 48 }} />
       </div>
     </div>
   );

@@ -7,70 +7,110 @@ interface TimerState {
   timeLeft: number;
   mode: TimerMode;
   status: TimerStatus;
-  cyclesCompleted: number;
-  // Settings (could be moved to a settings store later)
+  cyclesCompleted: number;   // total focus cycles ever completed
+  cycleInSet: number;        // 0-3, resets after long break
+  focusStartTime: Date | null;
+
+  // Settings
   focusDuration: number;
   shortBreakDuration: number;
   longBreakDuration: number;
-  
+  cyclesUntilLongBreak: number;
+
   // Actions
-  setTimeLeft: (time: number) => void;
   setMode: (mode: TimerMode) => void;
   setStatus: (status: TimerStatus) => void;
-  incrementCycles: () => void;
   resetTimer: () => void;
   tick: () => void;
+  /** Called after focus completes: auto-switch to break mode */
+  advanceCycle: () => void;
+  /** Called after break completes: switch back to focus */
+  advanceToFocus: () => void;
+  setDurations: (focus: number, shortBreak: number, longBreak: number) => void;
 }
 
-const DEFAULT_FOCUS_TIME = 25 * 60;
-const DEFAULT_SHORT_BREAK = 5 * 60;
-const DEFAULT_LONG_BREAK = 15 * 60;
+const DEFAULT_FOCUS       = 25 * 60;
+const DEFAULT_SHORT_BREAK =  5 * 60;
+const DEFAULT_LONG_BREAK  = 15 * 60;
+const DEFAULT_CYCLES      = 4;
 
 export const useTimerStore = create<TimerState>((set, get) => ({
-  timeLeft: DEFAULT_FOCUS_TIME,
-  mode: 'focus',
-  status: 'idle',
-  cyclesCompleted: 0,
-  focusDuration: DEFAULT_FOCUS_TIME,
-  shortBreakDuration: DEFAULT_SHORT_BREAK,
-  longBreakDuration: DEFAULT_LONG_BREAK,
+  timeLeft:            DEFAULT_FOCUS,
+  mode:                'focus',
+  status:              'idle',
+  cyclesCompleted:     0,
+  cycleInSet:          0,
+  focusStartTime:      null,
+  focusDuration:       DEFAULT_FOCUS,
+  shortBreakDuration:  DEFAULT_SHORT_BREAK,
+  longBreakDuration:   DEFAULT_LONG_BREAK,
+  cyclesUntilLongBreak: DEFAULT_CYCLES,
 
-  setTimeLeft: (time) => set({ timeLeft: time }),
-  
   setMode: (mode) => {
     const { focusDuration, shortBreakDuration, longBreakDuration } = get();
-    let newTime;
-    switch (mode) {
-      case 'focus': newTime = focusDuration; break;
-      case 'shortBreak': newTime = shortBreakDuration; break;
-      case 'longBreak': newTime = longBreakDuration; break;
-    }
-    set({ mode, timeLeft: newTime, status: 'idle' });
+    const newTime =
+      mode === 'focus'      ? focusDuration :
+      mode === 'shortBreak' ? shortBreakDuration :
+      longBreakDuration;
+    set({ mode, timeLeft: newTime, status: 'idle', focusStartTime: null });
   },
 
-  setStatus: (status) => set({ status }),
-
-  incrementCycles: () => set((state) => ({ cyclesCompleted: state.cyclesCompleted + 1 })),
+  setStatus: (status) => {
+    set((state) => ({
+      status,
+      focusStartTime:
+        status === 'running' && state.mode === 'focus' && state.focusStartTime === null
+          ? new Date()
+          : state.focusStartTime,
+    }));
+  },
 
   resetTimer: () => {
     const { mode, focusDuration, shortBreakDuration, longBreakDuration } = get();
-    let resetTime;
-    switch (mode) {
-      case 'focus': resetTime = focusDuration; break;
-      case 'shortBreak': resetTime = shortBreakDuration; break;
-      case 'longBreak': resetTime = longBreakDuration; break;
-    }
-    set({ timeLeft: resetTime, status: 'idle' });
+    const resetTime =
+      mode === 'focus'      ? focusDuration :
+      mode === 'shortBreak' ? shortBreakDuration :
+      longBreakDuration;
+    set({ timeLeft: resetTime, status: 'idle', focusStartTime: null });
   },
 
   tick: () => {
     const { timeLeft, status } = get();
     if (status !== 'running') return;
-
     if (timeLeft > 0) {
       set({ timeLeft: timeLeft - 1 });
     } else {
-      set({ status: 'completed' }); // Logic to handle completion will be in the component or a subscriber
+      set({ status: 'completed' });
     }
+  },
+
+  advanceCycle: () => {
+    const { cyclesCompleted, cycleInSet, cyclesUntilLongBreak, shortBreakDuration, longBreakDuration } = get();
+    const newCyclesCompleted = cyclesCompleted + 1;
+    const newCycleInSet = cycleInSet + 1;
+    const isLongBreak = newCycleInSet >= cyclesUntilLongBreak;
+    const nextMode: TimerMode = isLongBreak ? 'longBreak' : 'shortBreak';
+    const nextTime = isLongBreak ? longBreakDuration : shortBreakDuration;
+    set({
+      cyclesCompleted: newCyclesCompleted,
+      cycleInSet:      isLongBreak ? 0 : newCycleInSet,
+      mode:            nextMode,
+      timeLeft:        nextTime,
+      status:          'idle',
+      focusStartTime:  null,
+    });
+  },
+
+  advanceToFocus: () => {
+    const { focusDuration } = get();
+    set({ mode: 'focus', timeLeft: focusDuration, status: 'idle', focusStartTime: null });
+  },
+
+  setDurations: (focus, shortBreak, longBreak) => {
+    set({
+      focusDuration:      focus,
+      shortBreakDuration: shortBreak,
+      longBreakDuration:  longBreak,
+    });
   },
 }));

@@ -1,85 +1,222 @@
 import React, { useState } from 'react';
-import { useGameStore } from '../../features/game/useGameStore';
-import { GACHA_COST, rollGacha } from '../../data/items';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, X } from 'lucide-react';
-import { playClick } from '../../utils/audio';
+import { useGameStore } from '../../features/game/useGameStore';
+import { ALL_ITEMS, rollItemBox, RARITY_LABEL, type Rarity, type ItemDefinition } from '../../data/items';
+import { playClick, playNotification, playError } from '../../utils/audio';
 
-export const ShopView: React.FC<{ onClose: () => void }> = ({ onClose }) => {
-  const { coins, addCoins, addItem } = useGameStore();
-  const [lastItem, setLastItem] = useState<{name: string, rarity: string} | null>(null);
+const BOX_TIERS = [
+  {
+    id: 'normal' as const,
+    nameKo: '일반 박스',
+    cost: 100,
+    descKo: '1★ 70%  /  2★ 20%  /  3★ 10%',
+    emoji: '📦',
+    gradient: 'linear-gradient(135deg, #F3F4F6 0%, #E5E7EB 100%)',
+    border: '#E5E7EB',
+  },
+  {
+    id: 'premium' as const,
+    nameKo: '프리미엄 박스',
+    cost: 300,
+    descKo: '1★ 40%  /  2★ 40%  /  3★ 20%',
+    emoji: '✨',
+    gradient: 'linear-gradient(135deg, #EEF2FF 0%, #C7D2FE 100%)',
+    border: '#C7D2FE',
+  },
+  {
+    id: 'legendary' as const,
+    nameKo: '전설 박스',
+    cost: 600,
+    descKo: '2★ 50%  /  3★ 50%',
+    emoji: '🌟',
+    gradient: 'linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%)',
+    border: '#FDE68A',
+  },
+] as const;
 
-  const handleBuy = () => {
+type BoxTierId = typeof BOX_TIERS[number]['id'];
+
+function rollByTier(tierId: BoxTierId, character: 'cat' | 'fox'): ItemDefinition {
+  if (tierId === 'normal') return rollItemBox(character);
+
+  const rand = Math.random() * 100;
+  let targetRarity: Rarity;
+
+  if (tierId === 'premium') {
+    targetRarity = rand < 40 ? 1 : rand < 80 ? 2 : 3;
+  } else {
+    targetRarity = rand < 50 ? 2 : 3;
+  }
+
+  const pool = ALL_ITEMS.filter(
+    (i) => i.rarity === targetRarity &&
+      (i.compatibleCharacters === 'all' || (i.compatibleCharacters as string[]).includes(character))
+  );
+  const fallback = ALL_ITEMS.filter((i) => i.rarity === 1);
+  const finalPool = pool.length > 0 ? pool : fallback;
+  return finalPool[Math.floor(Math.random() * finalPool.length)];
+}
+
+export const ShopView: React.FC = () => {
+  const { coins, addCoins, addInventoryItem, selectedCharacter } = useGameStore();
+  const [result, setResult] = useState<{ nameKo: string; rarity: Rarity; emoji: string } | null>(null);
+  const [opening, setOpening] = useState(false);
+
+  const handleBuy = (tier: typeof BOX_TIERS[number]) => {
     playClick();
-    if (coins >= GACHA_COST) {
-      addCoins(-GACHA_COST);
-      const newItem = rollGacha();
-      addItem(newItem);
-      setLastItem({ name: newItem.name, rarity: newItem.rarity });
-    } else {
-      alert('Not enough coins!');
-    }
+    if (coins < tier.cost) { playError(); return; }
+    if (opening) return;
+
+    setOpening(true);
+    setResult(null);
+    addCoins(-tier.cost);
+
+    setTimeout(() => {
+      const item = rollByTier(tier.id, selectedCharacter);
+      addInventoryItem(item);
+      setResult({ nameKo: item.nameKo, rarity: item.rarity, emoji: item.emoji });
+      playNotification();
+      setOpening(false);
+    }, 700);
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 50 }} 
-      animate={{ opacity: 1, y: 0 }} 
-      exit={{ opacity: 0, y: 50 }}
-      className="absolute inset-0 bg-white/90 backdrop-blur-xl z-50 p-6 flex flex-col items-center"
-    >
-      <div className="w-full flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold">Shop</h2>
-        <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100">
-          <X />
-        </button>
+    <div style={{ padding: '20px 20px 28px', maxWidth: 480, margin: '0 auto' }}>
+      {/* Header */}
+      <div style={{ textAlign: 'center', marginBottom: 24 }}>
+        <h2 style={{ fontWeight: 900, fontSize: '1.3rem', color: 'var(--text-primary)', marginBottom: 4 }}>
+          🛍️ 상점
+        </h2>
+        <p style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+          코인으로 아이템 박스를 구매하세요
+        </p>
       </div>
 
-      <div className="flex-1 flex flex-col items-center justify-center w-full">
-        <div className="text-center mb-8">
-            <ShoppingBag size={64} className="mx-auto mb-4 text-purple-500" />
-            <h3 className="text-xl font-bold mb-2">Mystery Box</h3>
-            <p className="text-gray-500 mb-4">Get random items!</p>
-            <div className="text-lg font-bold text-yellow-600 mb-6">
-                {GACHA_COST} Coins
-            </div>
-            
-            <button 
-                onClick={handleBuy}
-                disabled={coins < GACHA_COST}
-                className={`px-8 py-3 rounded-full text-white font-bold shadow-lg transition-transform ${
-                    coins >= GACHA_COST 
-                    ? 'bg-gradient-to-r from-purple-500 to-indigo-500 hover:scale-105' 
-                    : 'bg-gray-300 cursor-not-allowed'
-                }`}
-            >
-                Buy 1
-            </button>
+      {/* Coin balance */}
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+        <div className="coin-display" style={{ fontSize: '1rem', padding: '8px 20px' }}>
+          🪙 {coins} 코인
         </div>
+      </div>
 
-        <AnimatePresence>
-            {lastItem && (
-                <motion.div 
-                    initial={{ scale: 0 }} 
-                    animate={{ scale: 1 }} 
-                    className="p-6 bg-yellow-50 rounded-xl border-2 border-yellow-200 text-center"
-                >
-                    <p className="text-sm text-gray-500">You got:</p>
-                    <p className={`text-xl font-bold ${
-                        lastItem.rarity === 'epic' ? 'text-purple-600' : 
-                        lastItem.rarity === 'rare' ? 'text-blue-600' : 'text-gray-800'
-                    }`}>
-                        {lastItem.name}
-                    </p>
-                    <span className="text-xs uppercase tracking-wider text-gray-400">{lastItem.rarity}</span>
-                </motion.div>
-            )}
-        </AnimatePresence>
+      {/* Earn hint */}
+      <div style={{
+        padding: '10px 14px',
+        background: 'rgba(126, 219, 183, 0.12)',
+        border: '1.5px solid rgba(126, 219, 183, 0.35)',
+        borderRadius: 'var(--radius-md)',
+        fontSize: '0.78rem',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
+        marginBottom: 20,
+      }}>
+        💡 집중 세션 완료 시 50코인 획득! 업적 달성 시 추가 보너스!
       </div>
-      
-      <div className="w-full py-4 text-center text-gray-400 text-sm">
-        Current Coins: {coins}
+
+      {/* Box tiers */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24 }}>
+        {BOX_TIERS.map((tier) => {
+          const canAfford = coins >= tier.cost;
+          return (
+            <motion.div
+              key={tier.id}
+              className="glass-card"
+              style={{ padding: '16px 18px', display: 'flex', alignItems: 'center', gap: 14 }}
+              whileHover={{ y: -2 }}
+              transition={{ duration: 0.2 }}
+            >
+              {/* Box icon */}
+              <div style={{
+                width: 60, height: 60, flexShrink: 0,
+                borderRadius: 'var(--radius-md)',
+                background: tier.gradient,
+                border: `1.5px solid ${tier.border}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '1.8rem',
+              }}>
+                {tier.emoji}
+              </div>
+
+              {/* Info */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 900, fontSize: '0.95rem', color: 'var(--text-primary)', marginBottom: 2 }}>
+                  {tier.nameKo}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 6 }}>
+                  {tier.descKo}
+                </div>
+                <div className="coin-display" style={{ fontSize: '0.78rem', padding: '3px 10px', display: 'inline-flex' }}>
+                  🪙 {tier.cost}
+                </div>
+              </div>
+
+              {/* Buy button */}
+              <motion.button
+                onClick={() => handleBuy(tier)}
+                disabled={!canAfford || opening}
+                style={{
+                  flexShrink: 0,
+                  padding: '9px 16px',
+                  borderRadius: 'var(--radius-full)',
+                  background: canAfford ? 'var(--rose-grad)' : 'rgba(0,0,0,0.08)',
+                  color: canAfford ? '#fff' : 'var(--text-muted)',
+                  fontWeight: 800,
+                  fontSize: '0.85rem',
+                  border: 'none',
+                  cursor: canAfford && !opening ? 'pointer' : 'not-allowed',
+                  opacity: canAfford && !opening ? 1 : 0.55,
+                  boxShadow: canAfford ? 'var(--shadow-rose)' : 'none',
+                  transition: 'all 0.2s',
+                }}
+                whileHover={canAfford && !opening ? { scale: 1.05 } : {}}
+                whileTap={canAfford && !opening ? { scale: 0.95 } : {}}
+              >
+                {opening ? '...' : '구매'}
+              </motion.button>
+            </motion.div>
+          );
+        })}
       </div>
-    </motion.div>
+
+      {/* Result reveal */}
+      <AnimatePresence>
+        {result && (
+          <motion.div
+            key="shop-result"
+            initial={{ opacity: 0, scale: 0.7, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+            style={{
+              padding: '20px',
+              borderRadius: 'var(--radius-lg)',
+              background:
+                result.rarity === 3 ? 'linear-gradient(135deg, #FEF3C7, #FDE68A)' :
+                result.rarity === 2 ? '#EEF2FF' : '#F9FAFB',
+              border: `2px solid ${result.rarity === 3 ? '#FDE68A' : result.rarity === 2 ? '#C7D2FE' : '#E5E7EB'}`,
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '3rem', marginBottom: 8 }}>{result.emoji}</div>
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: 4 }}>획득!</p>
+            <p style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--text-primary)', marginBottom: 8 }}>
+              {result.nameKo}
+            </p>
+            <span className={`rarity-badge rarity-badge--${result.rarity}`}>
+              {RARITY_LABEL[result.rarity]}
+            </span>
+            <div style={{ marginTop: 14 }}>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: '0.82rem' }}
+                onClick={() => { playClick(); setResult(null); }}
+              >
+                닫기
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 };
