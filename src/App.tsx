@@ -12,6 +12,7 @@ import { CalendarView } from './components/calendar/CalendarView';
 import { InventoryView } from './components/inventory/InventoryView';
 import { ShopView } from './components/shop/ShopView';
 import { AuthModal } from './components/auth/AuthModal';
+import { AuthPage } from './components/auth/AuthPage';
 import { playClick } from './utils/audio';
 
 type Tab = 'home' | 'room' | 'calendar' | 'inventory';
@@ -30,6 +31,8 @@ function App() {
   const [tab, setTab]               = useState<Tab>('home');
   const [showShop, setShowShop]     = useState(false);
   const [showAuth, setShowAuth]     = useState(false);
+  // true when user explicitly chose to continue without an account
+  const [guestAllowed, setGuestAllowed] = useState(false);
 
   // ── Auth init — bridge auth events → game store ──────────
   useEffect(() => {
@@ -44,9 +47,33 @@ function App() {
     playClick();
     await signOut();
     clearUserId();
+    setGuestAllowed(false); // return to auth page on logout
   };
 
-  // ── Onboarding gate ───────────────────────────────────────
+  // ── Gate 1: loading (brief — while Supabase checks existing session) ──
+  if (authStatus === 'loading') {
+    return (
+      <div style={{
+        minHeight: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center', background: 'var(--cream)',
+      }}>
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1.2, repeat: Infinity, ease: 'linear' }}
+          style={{ fontSize: '2.4rem' }}
+        >
+          🍅
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ── Gate 2: not logged in and hasn't chosen guest mode → auth page ──
+  if (authStatus === 'guest' && !guestAllowed) {
+    return <AuthPage onGuest={() => setGuestAllowed(true)} />;
+  }
+
+  // ── Gate 3: logged in (or guest) but no character chosen yet → onboarding ──
   if (!hasChosenCharacter) {
     return <CharacterSelect />;
   }

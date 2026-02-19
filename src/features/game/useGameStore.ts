@@ -71,6 +71,7 @@ interface GameState {
   // Cloud sync actions
   loadFromCloud: (userId: string) => Promise<void>;
   clearUserId: () => void;
+  resetForNewAccount: () => void;
 }
 
 // =========================================================
@@ -373,6 +374,19 @@ export const useGameStore = create<GameState>()(
 
       // ── clearUserId ──────────────────────────────
       clearUserId: () => set({ userId: null }),
+
+      // ── resetForNewAccount ───────────────────────
+      resetForNewAccount: () => set({
+        selectedCharacter: 'cat',
+        nickname: '',
+        hasChosenCharacter: false,
+        coins: 0,
+        inventory: [],
+        equipped: { background: null, accessory: null, skin: null },
+        sessionHistory: [],
+        achievements: initialAchievements,
+        pendingReward: null,
+      }),
     }),
     {
       name: 'cute-pomodoro-v2',
