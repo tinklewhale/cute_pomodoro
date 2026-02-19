@@ -26,10 +26,11 @@ interface RoomState {
   channel: RealtimeChannel | null;
 
   // Actions
-  createRoom: (userId: string, nickname: string, characterId: CharacterType) => Promise<void>;
-  joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType) => Promise<void>;
+  createRoom: (userId: string, nickname: string, characterId: CharacterType, focusSecondsToday?: number) => Promise<void>;
+  joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType, focusSecondsToday?: number) => Promise<void>;
   leaveRoom: (userId: string) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
+  broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -108,7 +109,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   // ── createRoom ──────────────────────────────────
-  createRoom: async (userId, nickname, characterId) => {
+  createRoom: async (userId, nickname, characterId, focusSecondsToday = 0) => {
     const code = generateCode();
     const roomId = `room_${code}`;
 
@@ -129,9 +130,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         room_id:   roomId,
         user_id:   userId,
         nickname,
-        character_id:   characterId,
-        timer_status:   'idle',
-        focus_seconds_today: 0,
+        character_id:        characterId,
+        timer_status:        'idle',
+        focus_seconds_today: focusSecondsToday,
       });
 
     if (memberErr) {
@@ -143,7 +144,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
 
   // ── joinRoom ────────────────────────────────────
-  joinRoom: async (code, userId, nickname, characterId) => {
+  joinRoom: async (code, userId, nickname, characterId, focusSecondsToday = 0) => {
     const roomId = `room_${code.toUpperCase()}`;
 
     // Check room exists
@@ -176,9 +177,9 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         room_id:   roomId,
         user_id:   userId,
         nickname,
-        character_id:   characterId,
-        timer_status:   'idle',
-        focus_seconds_today: 0,
+        character_id:        characterId,
+        timer_status:        'idle',
+        focus_seconds_today: focusSecondsToday,
       });
 
     if (memberErr) {
@@ -224,6 +225,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
     await supabase
       .from('room_members')
       .update({ timer_status: status })
+      .eq('room_id', roomId)
+      .eq('user_id', userId);
+  },
+
+  // ── broadcastFocusSeconds ───────────────────────
+  broadcastFocusSeconds: async (userId, seconds) => {
+    const { roomId } = get();
+    if (!roomId) return;
+
+    await supabase
+      .from('room_members')
+      .update({ focus_seconds_today: seconds })
       .eq('room_id', roomId)
       .eq('user_id', userId);
   },

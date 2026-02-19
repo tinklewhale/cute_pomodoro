@@ -13,7 +13,11 @@ import { InventoryView } from './components/inventory/InventoryView';
 import { ShopView } from './components/shop/ShopView';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthPage } from './components/auth/AuthPage';
-import { playClick } from './utils/audio';
+import { playClick, playNotification } from './utils/audio';
+import { rollItemBox } from './data/items';
+import { useTimerStore } from './features/timer/useTimerStore';
+import { useRoomStore, type MemberTimerStatus } from './features/room/useRoomStore';
+import { SESSION_USER_ID } from './utils/sessionId';
 
 type Tab = 'home' | 'room' | 'calendar' | 'inventory';
 
@@ -25,8 +29,12 @@ const NAV_TABS: { id: Tab; labelKo: string; icon: React.ReactNode }[] = [
 ];
 
 function App() {
-  const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId } = useGameStore();
+  const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId,
+          addCoins, addSessionRecord, setPendingReward, unlockAchievement } = useGameStore();
   const { user, status: authStatus, signOut } = useAuthStore();
+  const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
+          advanceCycle, advanceToFocus } = useTimerStore();
+  const { roomId, broadcastTimerStatus, broadcastFocusSeconds } = useRoomStore();
 
   const [tab, setTab]               = useState<Tab>('home');
   const [showShop, setShowShop]     = useState(false);
@@ -42,6 +50,54 @@ function App() {
     return unsubscribe;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Global tick interval (runs regardless of active tab) ──
+  useEffect(() => {
+    if (timerStatus !== 'running') return;
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [timerStatus, tick]);
+
+  // ── Handle timer completion ────────────────────────────────
+  useEffect(() => {
+    if (timerStatus !== 'completed') return;
+    playNotification();
+    if (timerMode === 'focus') {
+      addCoins(50);
+      if (focusStartTime) {
+        addSessionRecord({ startedAt: focusStartTime.toISOString(), durationSeconds: focusDuration });
+      }
+      unlockAchievement('ach_first');
+      const hour = new Date().getHours();
+      if (hour >= 0 && hour < 6) unlockAchievement('ach_night');
+      if (hour >= 4 && hour < 6) unlockAchievement('ach_dawn');
+      // Sync today's total focus seconds to room
+      if (roomId) {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const todaySeconds = useGameStore.getState().sessionHistory
+          .filter((r) => r.date === todayStr)
+          .reduce((sum, r) => sum + r.durationSeconds, 0);
+        void broadcastFocusSeconds(SESSION_USER_ID, todaySeconds);
+      }
+      setPendingReward(rollItemBox(selectedCharacter));
+      const t = setTimeout(() => advanceCycle(), 1200);
+      return () => clearTimeout(t);
+    } else {
+      const t = setTimeout(() => advanceToFocus(), 1000);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerStatus]);
+
+  // ── Broadcast timer status to room ────────────────────────
+  useEffect(() => {
+    if (!roomId) return;
+    const mapped: MemberTimerStatus =
+      timerStatus === 'running'   ? 'running'   :
+      timerStatus === 'paused'    ? 'paused'    :
+      timerStatus === 'completed' ? 'completed' : 'idle';
+    void broadcastTimerStatus(SESSION_USER_ID, mapped);
+  }, [timerStatus, roomId, broadcastTimerStatus]);
 
   const handleSignOut = async () => {
     playClick();

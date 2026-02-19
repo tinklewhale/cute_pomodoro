@@ -1,13 +1,9 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { motion } from 'framer-motion';
 import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
 import { useTimerStore, type TimerMode } from '../../features/timer/useTimerStore';
-import { useGameStore } from '../../features/game/useGameStore';
-import { useRoomStore } from '../../features/room/useRoomStore';
 import { CharacterView } from '../character/CharacterView';
-import { playClick, playNotification } from '../../utils/audio';
-import { rollItemBox } from '../../data/items';
-import type { MemberTimerStatus } from '../../features/room/useRoomStore';
+import { playClick } from '../../utils/audio';
 
 // ── Helpers ────────────────────────────────────────────────
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -136,13 +132,9 @@ export const TimerDisplay: React.FC = () => {
   const {
     timeLeft, mode, status, cyclesCompleted, cycleInSet, cyclesUntilLongBreak,
     focusDuration, shortBreakDuration, longBreakDuration,
-    focusStartTime,
-    setMode, setStatus, resetTimer, tick, advanceCycle, advanceToFocus,
+    setMode, setStatus, resetTimer,
   } = useTimerStore();
 
-  const { addCoins, selectedCharacter, setPendingReward, unlockAchievement, addSessionRecord } = useGameStore();
-  const { roomId, broadcastTimerStatus } = useRoomStore();
-  const userId = React.useRef(`user_${Math.random().toString(36).slice(2, 10)}`);
 
   const [showSettings, setShowSettings] = React.useState(false);
 
@@ -159,62 +151,6 @@ export const TimerDisplay: React.FC = () => {
     status === 'paused'    ? cfg.statusPaused  :
     status === 'completed' ? cfg.statusCompleted :
     cfg.statusIdle;
-
-  // Tick interval
-  useEffect(() => {
-    if (status !== 'running') return;
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [status, tick]);
-
-  // Handle completion
-  useEffect(() => {
-    if (status !== 'completed') return;
-
-    playNotification();
-
-    if (mode === 'focus') {
-      // Reward coins
-      addCoins(50);
-
-      // Record session
-      if (focusStartTime) {
-        addSessionRecord({
-          startedAt:       focusStartTime.toISOString(),
-          durationSeconds: focusDuration,
-        });
-      }
-
-      // First session achievement
-      unlockAchievement('ach_first');
-
-      // Check time-based achievements
-      const hour = new Date().getHours();
-      if (hour >= 0 && hour < 6)  unlockAchievement('ach_night');
-      if (hour >= 4 && hour < 6)  unlockAchievement('ach_dawn');
-
-      // Set pending reward (item box during break)
-      const reward = rollItemBox(selectedCharacter);
-      setPendingReward(reward);
-
-      // Auto-advance to break
-      setTimeout(() => advanceCycle(), 1200);
-    } else {
-      // Break completed → back to focus
-      setTimeout(() => advanceToFocus(), 1000);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [status]);
-
-  // Broadcast timer status to room
-  useEffect(() => {
-    if (!roomId) return;
-    const mapped: MemberTimerStatus =
-      status === 'running'   ? 'running'   :
-      status === 'paused'    ? 'paused'    :
-      status === 'completed' ? 'completed' : 'idle';
-    void broadcastTimerStatus(userId.current, mapped);
-  }, [status, roomId, broadcastTimerStatus]);
 
   const handleToggle = () => {
     playClick();

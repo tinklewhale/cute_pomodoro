@@ -3,11 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, LogOut, Users } from 'lucide-react';
 import { useRoomStore } from '../../features/room/useRoomStore';
 import { useGameStore } from '../../features/game/useGameStore';
+import { useTimerStore } from '../../features/timer/useTimerStore';
 import { playClick } from '../../utils/audio';
 import type { MemberTimerStatus } from '../../features/room/useRoomStore';
+import { SESSION_USER_ID } from '../../utils/sessionId';
 
-// Persistent user ID (session-scoped)
-const SESSION_USER_ID = `user_${Math.random().toString(36).slice(2, 10)}`;
+const pad = (n: number) => String(n).padStart(2, '0');
 
 const STATUS_DOT: Record<MemberTimerStatus, { color: string; label: string }> = {
   idle:      { color: '#D1D5DB', label: '대기' },
@@ -16,7 +17,6 @@ const STATUS_DOT: Record<MemberTimerStatus, { color: string; label: string }> = 
   completed: { color: '#7EDBB7', label: '완료' },
 };
 
-// Rank sort: by focusSecondsToday desc
 function toHHMM(seconds: number) {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -25,7 +25,8 @@ function toHHMM(seconds: number) {
 
 export const RoomView: React.FC = () => {
   const { roomId, roomCode, members, isConnected, error, createRoom, joinRoom, leaveRoom, clearError } = useRoomStore();
-  const { selectedCharacter, nickname, unlockAchievement } = useGameStore();
+  const { selectedCharacter, nickname, unlockAchievement, sessionHistory } = useGameStore();
+  const { timeLeft, status: timerStatus, mode: timerMode, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
 
   const [tab, setTab] = useState<'create' | 'join'>('create');
   const [joinCode, setJoinCode] = useState('');
@@ -33,11 +34,17 @@ export const RoomView: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Today's already-completed focus seconds (passed when joining so ranking starts correctly)
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todaySeconds = sessionHistory
+    .filter((r) => r.date === todayStr)
+    .reduce((sum, r) => sum + r.durationSeconds, 0);
+
   const handleCreate = async () => {
     if (loading) return;
     playClick();
     setLoading(true);
-    await createRoom(SESSION_USER_ID, nickname || '익명', selectedCharacter);
+    await createRoom(SESSION_USER_ID, nickname || '익명', selectedCharacter, todaySeconds);
     setLoading(false);
     unlockAchievement('ach_friends');
   };
@@ -46,7 +53,7 @@ export const RoomView: React.FC = () => {
     if (!joinCode.trim() || loading) return;
     playClick();
     setLoading(true);
-    await joinRoom(joinCode.trim(), SESSION_USER_ID, nickname || '익명', selectedCharacter);
+    await joinRoom(joinCode.trim(), SESSION_USER_ID, nickname || '익명', selectedCharacter, todaySeconds);
     setLoading(false);
     if (!error) unlockAchievement('ach_friends');
   };
@@ -67,6 +74,10 @@ export const RoomView: React.FC = () => {
   if (isConnected && roomId) {
     const sorted = [...members].sort((a, b) => b.focusSecondsToday - a.focusSecondsToday);
     const me = members.find((m) => m.userId === SESSION_USER_ID);
+
+    const timerColor =
+      timerMode === 'focus'      ? 'var(--rose)'  :
+      timerMode === 'shortBreak' ? '#5EC49A'       : '#5BA8E5';
 
     return (
       <div style={{ padding: '20px 16px', maxWidth: 500, margin: '0 auto' }}>
@@ -101,7 +112,7 @@ export const RoomView: React.FC = () => {
           </div>
         </div>
 
-        {/* My status card */}
+        {/* My status card with timer display */}
         {me && (
           <div
             className="glass-card"
@@ -111,6 +122,15 @@ export const RoomView: React.FC = () => {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{me.nickname} (나)</div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{STATUS_DOT[me.timerStatus].label}</div>
+              {/* Live timer countdown */}
+              {timerStatus !== 'idle' && timerStatus !== 'completed' && (
+                <div style={{ fontSize: '0.9rem', fontWeight: 900, color: timerColor, marginTop: 2 }}>
+                  {pad(Math.floor(timeLeft / 60))}:{pad(timeLeft % 60)}
+                  <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-muted)', marginLeft: 7 }}>
+                    {cycleInSet + 1}/{cyclesUntilLongBreak}
+                  </span>
+                </div>
+              )}
             </div>
             <div style={{ width: 10, height: 10, borderRadius: '50%', background: STATUS_DOT[me.timerStatus].color }} />
           </div>
@@ -161,12 +181,31 @@ export const RoomView: React.FC = () => {
                   {idx + 1}
                 </div>
 
-                {/* Character */}
-                <img
-                  src={`/characters/${member.characterId}.png`}
-                  alt={member.characterId}
-                  style={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0 }}
-                />
+                {/* Character with timer pill overlay for my card */}
+                <div style={{ position: 'relative', flexShrink: 0 }}>
+                  <img
+                    src={`/characters/${member.characterId}.png`}
+                    alt={member.characterId}
+                    style={{ width: 36, height: 36, objectFit: 'contain', display: 'block' }}
+                  />
+                  {isMe && timerStatus === 'running' && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: -7, left: '50%',
+                      transform: 'translateX(-50%)',
+                      background: timerColor,
+                      color: '#fff',
+                      fontSize: '0.52rem',
+                      fontWeight: 900,
+                      padding: '1px 5px',
+                      borderRadius: 99,
+                      whiteSpace: 'nowrap',
+                      boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                    }}>
+                      {pad(Math.floor(timeLeft / 60))}:{pad(timeLeft % 60)}
+                    </div>
+                  )}
+                </div>
 
                 {/* Info */}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -302,12 +341,12 @@ export const RoomView: React.FC = () => {
             maxLength={6}
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
+            onKeyDown={(e) => e.key === 'Enter' && void handleJoin()}
             autoFocus
             style={{ textAlign: 'center', fontSize: '1.3rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}
           />
           <motion.button
-            onClick={handleJoin}
+            onClick={() => void handleJoin()}
             disabled={joinCode.trim().length < 4 || loading}
             style={{
               width: '100%',
