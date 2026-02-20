@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   // ── init ──────────────────────────────────────────────────
   init: (onLoginCallback) => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      (_event: any, session: any) => {
         if (session?.user) {
           set({ user: session.user, status: 'authenticated', error: null });
           onLoginCallback(session.user.id);

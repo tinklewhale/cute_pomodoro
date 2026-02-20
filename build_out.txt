@@ -1,0 +1,20 @@
+﻿
+> pomodoro-web-game@0.0.0 build
+> tsc -b && vite build
+
+src/components/calendar/CalendarView.tsx(6,8): error TS2307: Cannot find module 'date-fns' or its corresponding type declarations.
+src/components/calendar/CalendarView.tsx(7,20): error TS2307: Cannot find module 'date-fns/locale' or its corresponding type declarations.
+src/components/calendar/CalendarView.tsx(140,22): error TS7006: Parameter 'day' implicitly has an 'any' type.
+src/features/auth/useAuthStore.ts(2,38): error TS2307: Cannot find module '@supabase/supabase-js' or its corresponding type declarations.
+src/features/auth/useAuthStore.ts(47,8): error TS7006: Parameter '_event' implicitly has an 'any' type.
+src/features/auth/useAuthStore.ts(47,16): error TS7006: Parameter 'session' implicitly has an 'any' type.
+src/features/game/useGameStore.ts(3,38): error TS2307: Cannot find module '@supabase/supabase-js' or its corresponding type declarations.
+src/features/game/useGameStore.ts(412,58): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/features/game/useGameStore.ts(424,56): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/features/game/useGameStore.ts(431,16): error TS7006: Parameter 'r' implicitly has an 'any' type.
+src/features/game/useGameStore.ts(455,59): error TS7031: Binding element 'payload' implicitly has an 'any' type.
+src/features/game/useGameStore.ts(463,31): error TS7006: Parameter 'status' implicitly has an 'any' type.
+src/features/room/useRoomStore.ts(2,38): error TS2307: Cannot find module '@supabase/supabase-js' or its corresponding type declarations.
+src/features/room/useRoomStore.ts(79,8): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+src/features/room/useRoomStore.ts(103,50): error TS7031: Binding element 'payload' implicitly has an 'any' type.
+src/lib/supabase.ts(1,30): error TS2307: Cannot find module '@supabase/supabase-js' or its corresponding type declarations.

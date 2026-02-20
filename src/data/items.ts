@@ -290,7 +290,7 @@ export function rollItemBox(_character: CharacterType): ItemDefinition {
     i => i.rarity === targetRarity && !(i.type === 'character' && i.rarity === 3)
   );
 
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && !(i.type === 'character' && i.rarity === 3));
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1);
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
@@ -328,7 +328,7 @@ export function synthesizeItems(inputRarity: Rarity, _character: CharacterType):
 
   // 3★ 캐릭터는 합성 일반 풀에서 제외 (1★ 캐릭터는 포함)
   const pool = ALL_ITEMS.filter(i => i.rarity === outputRarity && !(i.type === 'character' && i.rarity === 3));
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && !(i.type === 'character' && i.rarity === 3));
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1);
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }

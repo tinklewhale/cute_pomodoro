@@ -137,7 +137,7 @@ export const CalendarView: React.FC = () => {
             <div key={`empty-${i}`} />
           ))}
 
-          {days.map((day) => {
+          {days.map((day: Date) => {
             const key = format(day, 'yyyy-MM-dd');
             const count = sessionsPerDay.get(key) ?? 0;
             const today = isToday(day);

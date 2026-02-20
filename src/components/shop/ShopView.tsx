@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useGameStore } from '../../features/game/useGameStore';
-import { ALL_ITEMS, rollItemBox, RARITY_LABEL, type Rarity, type ItemDefinition } from '../../data/items';
+import { ALL_ITEMS, rollItemBox, RARITY_LABEL, type Rarity, type ItemDefinition, type CharacterType } from '../../data/items';
 import { playClick, playNotification, playError } from '../../utils/audio';
 
 const BOX_TIERS = [
@@ -36,7 +36,7 @@ const BOX_TIERS = [
 
 type BoxTierId = typeof BOX_TIERS[number]['id'];
 
-function rollByTier(tierId: BoxTierId, character: 'cat' | 'fox'): ItemDefinition {
+function rollByTier(tierId: BoxTierId, character: CharacterType): ItemDefinition {
   if (tierId === 'normal') return rollItemBox(character);
 
   const rand = Math.random() * 100;

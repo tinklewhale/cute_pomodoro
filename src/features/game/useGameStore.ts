@@ -409,7 +409,7 @@ export const useGameStore = create<GameState>()(
           coins:              profile.coins,
           equipped: equippedToSet,
           inventory: (() => {
-            const cloudInv = (invResult.data ?? []).map((r) => ({
+            const cloudInv = (invResult.data ?? []).map((r: any) => ({
               instanceId:   r.instance_id,
               definitionId: r.definition_id,
             }));
@@ -421,14 +421,14 @@ export const useGameStore = create<GameState>()(
             }
             return cloudInv;
           })(),
-          sessionHistory: (sessResult.data ?? []).map((r) => ({
+          sessionHistory: (sessResult.data ?? []).map((r: any) => ({
             date:            r.session_date,
             startedAt:       r.started_at,
             durationSeconds: r.duration_seconds,
           })),
           achievements: ACHIEVEMENTS.map((a) => {
             const cloud = (achResult.data ?? []).find(
-              (r) => r.achievement_id === a.id,
+              (r: any) => r.achievement_id === a.id,
             );
             const local = get().achievements.find((l) => l.id === a.id);
             // 클라우드·로컬 중 unlockedAt이 있는 쪽 우선 (업적은 다시 잠기지 않으므로 안전)
@@ -452,7 +452,7 @@ export const useGameStore = create<GameState>()(
           // postgres_changes + RLS 문제 없이 동작
           const ch = supabase
             .channel(`user-logins:${userId}`)
-            .on('broadcast', { event: 'new-session' }, ({ payload }) => {
+            .on('broadcast', { event: 'new-session' }, ({ payload }: any) => {
               const incomingToken = payload?.token as string | undefined;
               const myToken = localStorage.getItem(SESSION_TOKEN_KEY);
               if (incomingToken && myToken && incomingToken !== myToken) {
@@ -460,7 +460,7 @@ export const useGameStore = create<GameState>()(
                 set({ sessionConflict: true });
               }
             })
-            .subscribe(async (status) => {
+            .subscribe(async (status: string) => {
               if (status === 'SUBSCRIBED') {
                 // 구독 완료 후 현재 기기 토큰 브로드캐스트 → 기존 기기에서 충돌 감지
                 await ch.send({

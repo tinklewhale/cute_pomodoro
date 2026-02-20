@@ -76,7 +76,7 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` },
-      (payload) => {
+      (payload: any) => {
         const { eventType, new: newRow, old: oldRow } = payload;
         set((s) => {
           if (eventType === 'INSERT') {
@@ -100,7 +100,7 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
         });
       }
     )
-    .on('broadcast', { event: 'timer-tick' }, ({ payload }) => {
+    .on('broadcast', { event: 'timer-tick' }, ({ payload }: any) => {
       // 상대방 타이머 남은 시간 수신 (DB 없이 Broadcast로만 동기화)
       const { userId, seconds } = payload as { userId: string; seconds: number };
       set((s) => ({
