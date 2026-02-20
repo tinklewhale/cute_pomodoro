@@ -31,7 +31,7 @@ const NAV_TABS: { id: Tab; labelKo: string; icon: React.ReactNode }[] = [
 function App() {
   const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId,
           addCoins, addSessionRecord, setPendingReward, unlockAchievement,
-          sessionConflict } = useGameStore();
+          sessionConflict, resetForNewAccount } = useGameStore();
   const { user, status: authStatus, signOut } = useAuthStore();
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
           advanceCycle, advanceToFocus,
@@ -59,6 +59,7 @@ function App() {
     const t = setTimeout(async () => {
       await signOut();
       clearUserId();
+      resetForNewAccount(); // 세션 충돌 로그아웃 시에도 로컬 상태 초기화
     }, 2500);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -158,6 +159,7 @@ function App() {
     playClick();
     await signOut();
     clearUserId();
+    resetForNewAccount(); // 이전 계정 데이터가 새 계정에 귀속되지 않도록 로컬 상태 초기화
     setGuestAllowed(false); // return to auth page on logout
   };
 
