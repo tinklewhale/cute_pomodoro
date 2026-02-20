@@ -2,6 +2,7 @@ import { create, type StoreApi } from 'zustand';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
 import type { CharacterType } from '../../data/items';
+import { SESSION_USER_ID } from '../../utils/sessionId';
 
 // =========================================================
 // Types
@@ -38,6 +39,7 @@ interface RoomState {
   joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType, timerStatus?: MemberTimerStatus, focusSecondsToday?: number) => Promise<void>;
   leaveRoom: (userId: string) => Promise<void>;
   updateMemberProfile: (userId: string, characterId: CharacterType, equippedBackground: string | null, equippedAccessory: string | null, equippedSkin: string | null) => void;
+  requestProfileSync: () => Promise<void>;
   broadcastProfileUpdate: (userId: string, characterId: CharacterType, equippedBackground: string | null, equippedAccessory: string | null, equippedSkin: string | null) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
@@ -61,7 +63,7 @@ const MAX_MEMBERS = 10;
 
 type SetFn = StoreApi<RoomState>['setState'];
 
-async function subscribeRoom(roomId: string, code: string, set: SetFn) {
+async function subscribeRoom(roomId: string, code: string, set: SetFn, get: () => RoomState) {
   const toMember = (row: Record<string, unknown>): RoomMember => ({
     userId:             row.user_id as string,
     nickname:           row.nickname as string,
@@ -164,9 +166,29 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
         ),
       }));
     })
-    .subscribe();
+    .on('broadcast', { event: 'request-profiles' }, () => {
+      const { members } = get();
+      const me = members.find((m) => m.userId === SESSION_USER_ID);
+      if (me) {
+        // Send our own profile back to the room
+        void get().broadcastProfileUpdate(
+          me.userId,
+          me.characterId,
+          me.equippedBackground ?? null,
+          me.equippedAccessory ?? null,
+          me.equippedSkin ?? null
+        );
+      }
+    });
 
-  set({ roomId, roomCode: code, members, isConnected: true, channel, error: null });
+  return new Promise<void>((resolve) => {
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        set({ roomId, roomCode: code, members, isConnected: true, channel, error: null });
+        resolve();
+      }
+    });
+  });
 }
 
 // =========================================================
@@ -215,7 +237,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       return;
     }
 
-    await subscribeRoom(roomId, code, set);
+    await subscribeRoom(roomId, code, set, get);
   },
 
   // ── joinRoom ────────────────────────────────────
@@ -262,7 +284,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       return;
     }
 
-    await subscribeRoom(roomId, code.toUpperCase(), set);
+    await subscribeRoom(roomId, code.toUpperCase(), set, get);
   },
 
   // ── leaveRoom ───────────────────────────────────
@@ -301,6 +323,17 @@ export const useRoomStore = create<RoomState>((set, get) => ({
           : m
       ),
     }));
+  },
+
+  // ── requestProfileSync ───────────────────────────
+  requestProfileSync: async () => {
+    const { channel } = get();
+    if (!channel) return;
+    await channel.send({
+      type: 'broadcast',
+      event: 'request-profiles',
+      payload: {},
+    });
   },
 
   // ── broadcastProfileUpdate ───────────────────────

@@ -30,14 +30,14 @@ const NAV_TABS: { id: Tab; labelKo: string; icon: React.ReactNode }[] = [
 ];
 
 function App() {
-  const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId,
+  const { hasChosenCharacter, coins, selectedCharacter, equipped, nickname, loadFromCloud, clearUserId,
           addCoins, addSessionRecord, setPendingReward, unlockAchievement,
           sessionConflict, resetForNewAccount } = useGameStore();
   const { user, status: authStatus, signOut } = useAuthStore();
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
           advanceCycle, advanceToFocus,
           timeLeft, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
-  const { roomId, members, isConnected, broadcastTimerStatus, broadcastFocusSeconds, broadcastTimerTick } = useRoomStore();
+  const { roomId, members, isConnected, broadcastTimerStatus, broadcastFocusSeconds, broadcastTimerTick, broadcastProfileUpdate, updateMemberProfile, requestProfileSync } = useRoomStore();
 
   const [tab, setTab]               = useState<Tab>('home');
   const [showShop, setShowShop]     = useState(false);
@@ -72,6 +72,34 @@ function App() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [timerStatus, tick]);
+
+  // ── Broadcast profile updates (character & items) ──
+  useEffect(() => {
+    if (!roomId) return;
+    updateMemberProfile(
+      SESSION_USER_ID,
+      selectedCharacter,
+      equipped.background,
+      equipped.accessory,
+      equipped.skin
+    );
+    void broadcastProfileUpdate(
+      SESSION_USER_ID,
+      selectedCharacter,
+      equipped.background,
+      equipped.accessory,
+      equipped.skin
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roomId, selectedCharacter, equipped.background, equipped.accessory, equipped.skin]);
+
+  // ── Request profiles when joining a room ────────────────
+  useEffect(() => {
+    if (isConnected) {
+      void requestProfileSync();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected]);
 
   // ── Handle timer completion ────────────────────────────────
   useEffect(() => {
