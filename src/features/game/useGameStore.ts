@@ -144,6 +144,15 @@ async function syncInventoryFull(userId: string, inventory: InventoryItem[]): Pr
   if (insErr) console.error('[sync] inventory insert failed:', insErr);
 }
 
+async function syncInventoryAppend(userId: string, item: InventoryItem): Promise<void> {
+  const { error } = await supabase.from('user_inventory').insert({
+    user_id:       userId,
+    instance_id:   item.instanceId,
+    definition_id: item.definitionId,
+  });
+  if (error) console.error('[sync] inventory append failed:', error);
+}
+
 async function syncSessionAppend(userId: string, record: SessionRecord): Promise<void> {
   const { error } = await supabase.from('user_sessions').insert({
     user_id:          userId,
@@ -215,14 +224,12 @@ export const useGameStore = create<GameState>()(
 
       // ── addInventoryItem ─────────────────────────
       addInventoryItem: (def) => {
+        const newItem = { instanceId: makeInstanceId(), definitionId: def.id };
         set((s) => ({
-          inventory: [
-            ...s.inventory,
-            { instanceId: makeInstanceId(), definitionId: def.id },
-          ],
+          inventory: [...s.inventory, newItem],
         }));
-        const { userId, inventory } = get();
-        if (userId) syncInventoryFull(userId, inventory);
+        const { userId } = get();
+        if (userId) syncInventoryAppend(userId, newItem);
       },
 
       // ── equipItem ───────────────────────────────
