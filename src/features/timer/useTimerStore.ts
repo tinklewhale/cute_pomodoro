@@ -107,10 +107,17 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   },
 
   setDurations: (focus, shortBreak, longBreak) => {
+    const { status, mode } = get();
+    // idle 상태일 때는 현재 모드의 timeLeft도 즉시 갱신
+    const newTimeLeft =
+      mode === 'focus'      ? focus :
+      mode === 'shortBreak' ? shortBreak :
+      longBreak;
     set({
       focusDuration:      focus,
       shortBreakDuration: shortBreak,
       longBreakDuration:  longBreak,
+      ...(status === 'idle' ? { timeLeft: newTimeLeft } : {}),
     });
   },
 }));

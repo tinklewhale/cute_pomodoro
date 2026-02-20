@@ -68,7 +68,29 @@ const SettingsPanel: React.FC<SettingsProps> = ({ onClose }) => {
       </label>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <button className="btn btn-ghost btn-icon" onClick={() => onChange(Math.max(min, val - 1))}>-</button>
-        <span style={{ fontWeight: 900, fontSize: '1.2rem', minWidth: 30, textAlign: 'center', color: 'var(--text-primary)' }}>{val}</span>
+        <input
+          type="number"
+          min={min}
+          max={max}
+          value={val}
+          onChange={(e) => {
+            const n = parseInt(e.target.value, 10);
+            if (!isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+          }}
+          style={{
+            fontWeight: 900,
+            fontSize: '1.2rem',
+            width: 56,
+            textAlign: 'center',
+            color: 'var(--text-primary)',
+            border: '1.5px solid rgba(0,0,0,0.10)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '4px 6px',
+            background: 'rgba(255,255,255,0.8)',
+            outline: 'none',
+            MozAppearance: 'textfield',
+          } as React.CSSProperties}
+        />
         <button className="btn btn-ghost btn-icon" onClick={() => onChange(Math.min(max, val + 1))}>+</button>
         <span style={{ fontSize: '0.82rem', color: 'var(--text-muted)', fontWeight: 600 }}>분</span>
       </div>
@@ -164,9 +186,13 @@ export const TimerDisplay: React.FC = () => {
   };
 
   const handleModeChange = (m: TimerMode) => {
+    // 집중 세션 진행 중(실행/일시정지) 모드 전환 방지
+    if (status === 'running' || status === 'paused') return;
     playClick();
     setMode(m);
   };
+
+  const isBusy = status === 'running' || status === 'paused';
 
   // ── Mode tab labels
   const MODES: { id: TimerMode; label: string }[] = [
@@ -212,20 +238,23 @@ export const TimerDisplay: React.FC = () => {
             <motion.button
               key={m.id}
               onClick={() => handleModeChange(m.id)}
+              disabled={isBusy && m.id !== mode}
+              title={isBusy && m.id !== mode ? '타이머 진행 중에는 모드를 바꿀 수 없어요' : undefined}
               style={{
                 padding: '7px 14px',
                 borderRadius: 'var(--radius-full)',
                 fontSize: '0.78rem',
                 fontWeight: 800,
                 border: 'none',
-                cursor: 'pointer',
+                cursor: isBusy && m.id !== mode ? 'not-allowed' : 'pointer',
                 background: isActive ? '#fff' : 'transparent',
                 color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                 boxShadow: isActive ? 'var(--shadow-xs)' : 'none',
+                opacity: isBusy && m.id !== mode ? 0.4 : 1,
                 transition: 'all 0.2s',
               }}
-              whileHover={!isActive ? { color: 'var(--text-secondary)' } : {}}
-              whileTap={{ scale: 0.95 }}
+              whileHover={!isActive && !isBusy ? { color: 'var(--text-secondary)' } : {}}
+              whileTap={!isBusy || m.id === mode ? { scale: 0.95 } : {}}
             >
               {m.label}
             </motion.button>
