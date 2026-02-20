@@ -37,6 +37,8 @@ interface RoomState {
   createRoom: (userId: string, nickname: string, characterId: CharacterType, timerStatus?: MemberTimerStatus, focusSecondsToday?: number) => Promise<void>;
   joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType, timerStatus?: MemberTimerStatus, focusSecondsToday?: number) => Promise<void>;
   leaveRoom: (userId: string) => Promise<void>;
+  updateMemberProfile: (userId: string, characterId: CharacterType, equippedBackground: string | null, equippedAccessory: string | null, equippedSkin: string | null) => void;
+  broadcastProfileUpdate: (userId: string, characterId: CharacterType, equippedBackground: string | null, equippedAccessory: string | null, equippedSkin: string | null) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
   broadcastTimerTick: (userId: string, seconds: number, mode?: string, cycleInSet?: number, cyclesUntilLongBreak?: number) => Promise<void>;
@@ -148,6 +150,16 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
         members: s.members.map((m) =>
           m.userId === userId
             ? { ...m, timerSecondsLeft: seconds, timerUpdatedAt: Date.now(), timerMode: mode, cycleInSet, cyclesUntilLongBreak }
+            : m
+        ),
+      }));
+    })
+    .on('broadcast', { event: 'profile-update' }, ({ payload }: any) => {
+      const { userId, characterId, equippedBackground, equippedAccessory, equippedSkin } = payload;
+      set((s) => ({
+        members: s.members.map((m) =>
+          m.userId === userId
+            ? { ...m, characterId, equippedBackground, equippedAccessory, equippedSkin }
             : m
         ),
       }));
@@ -277,6 +289,28 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       isConnected: false,
       channel:     null,
       error:       null,
+    });
+  },
+
+  // ── updateMemberProfile ─────────────────────────
+  updateMemberProfile: (userId, characterId, equippedBackground, equippedAccessory, equippedSkin) => {
+    set((s) => ({
+      members: s.members.map((m) =>
+        m.userId === userId
+          ? { ...m, characterId, equippedBackground, equippedAccessory, equippedSkin }
+          : m
+      ),
+    }));
+  },
+
+  // ── broadcastProfileUpdate ───────────────────────
+  broadcastProfileUpdate: async (userId, characterId, equippedBackground, equippedAccessory, equippedSkin) => {
+    const { channel } = get();
+    if (!channel) return;
+    await channel.send({
+      type: 'broadcast',
+      event: 'profile-update',
+      payload: { userId, characterId, equippedBackground, equippedAccessory, equippedSkin },
     });
   },
 

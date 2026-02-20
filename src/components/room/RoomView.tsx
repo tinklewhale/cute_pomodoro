@@ -5,8 +5,9 @@ import { useRoomStore } from '../../features/room/useRoomStore';
 import { useGameStore } from '../../features/game/useGameStore';
 import { useTimerStore } from '../../features/timer/useTimerStore';
 import { playClick } from '../../utils/audio';
-import type { MemberTimerStatus } from '../../features/room/useRoomStore';
+import type { MemberTimerStatus, RoomMember } from '../../features/room/useRoomStore';
 import { SESSION_USER_ID } from '../../utils/sessionId';
+import { getItemById } from '../../data/items';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -29,6 +30,26 @@ function interpolateSeconds(secondsLeft: number, updatedAt: number, status: Memb
   const elapsed = Math.floor((Date.now() - updatedAt) / 1000);
   return Math.max(0, secondsLeft - elapsed);
 }
+
+const MiniAvatar: React.FC<{ member: RoomMember; size: number }> = ({ member, size }) => {
+  const bgItem = member.equippedBackground ? getItemById(member.equippedBackground) : null;
+  const accItem = member.equippedAccessory ? getItemById(member.equippedAccessory) : null;
+  const skinItem = member.equippedSkin ? getItemById(member.equippedSkin) : null;
+  const bgGradient = bgItem?.assetData ?? 'linear-gradient(160deg, var(--lavender-light) 0%, var(--cream-dark) 100%)';
+  const skinFilter = skinItem?.type === 'skin' ? skinItem.assetData : undefined;
+
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: bgGradient }} />
+      <img src={`/characters/${member.characterId}.png`} style={{ position: 'relative', zIndex: 1, width: '80%', height: '80%', objectFit: 'contain', filter: skinFilter }} />
+      {accItem && (
+        <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 2, fontSize: size * 0.35, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.2))' }}>
+          {accItem.emoji}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export const RoomView: React.FC = () => {
   const { roomId, roomCode, members, isConnected, error, createRoom, joinRoom, leaveRoom, clearError } = useRoomStore();
@@ -141,7 +162,7 @@ export const RoomView: React.FC = () => {
             className="glass-card"
             style={{ padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12, border: '2px solid rgba(255, 107, 138, 0.25)' }}
           >
-            <img src={`/characters/${me.characterId}.png`} alt="" style={{ width: 40, height: 40, objectFit: 'contain' }} />
+            <MiniAvatar member={me} size={40} />
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 800, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{me.nickname} (나)</div>
               <div style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{STATUS_DOT[me.timerStatus].label}</div>
@@ -206,11 +227,7 @@ export const RoomView: React.FC = () => {
 
                 {/* Character with timer pill overlay */}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <img
-                    src={`/characters/${member.characterId}.png`}
-                    alt={member.characterId}
-                    style={{ width: 36, height: 36, objectFit: 'contain', display: 'block' }}
-                  />
+                  <MiniAvatar member={member} size={36} />
                   {isMe && timerStatus === 'running' && (
                     <div style={{
                       position: 'absolute',
