@@ -68,6 +68,8 @@ interface GameState {
   claimReward: () => void;
   synthesizeAndConsume: (instanceIds: string[], result: ItemDefinition) => void;
 
+  equipCharacter: (char: CharacterType) => void;
+
   // Cloud sync actions
   loadFromCloud: (userId: string) => Promise<void>;
   clearUserId: () => void;
@@ -174,7 +176,22 @@ export const useGameStore = create<GameState>()(
 
       // ── selectCharacter ──────────────────────────
       selectCharacter: (char, nick) => {
-        set({ selectedCharacter: char, nickname: nick, hasChosenCharacter: true });
+        const charItemId = char === 'cat' ? 'char_cat' : 'char_fox';
+        const hasCharItem = get().inventory.some((i) => i.definitionId === charItemId);
+        const newInventory = hasCharItem
+          ? get().inventory
+          : [...get().inventory, { instanceId: makeInstanceId(), definitionId: charItemId }];
+        set({ selectedCharacter: char, nickname: nick, hasChosenCharacter: true, inventory: newInventory });
+        const { userId } = get();
+        if (userId) {
+          syncProfile(userId, get());
+          syncInventoryFull(userId, get().inventory);
+        }
+      },
+
+      // ── equipCharacter ───────────────────────────
+      equipCharacter: (char) => {
+        set({ selectedCharacter: char });
         const { userId } = get();
         if (userId) syncProfile(userId, get());
       },

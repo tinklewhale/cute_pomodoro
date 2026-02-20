@@ -3,7 +3,7 @@
 // =========================================================
 
 export type Rarity = 1 | 2 | 3; // 1★ 일반 / 2★ 레어 / 3★ 전설
-export type ItemType = 'background' | 'accessory' | 'skin';
+export type ItemType = 'background' | 'accessory' | 'skin' | 'character';
 export type CharacterType = 'cat' | 'fox';
 
 export interface ItemDefinition {
@@ -172,19 +172,19 @@ export const ALL_ITEMS: ItemDefinition[] = [
   // ── 1★ Skins ──────────────────────────────────────────
   {
     id: 'skin_cat_pink',
-    nameKo: '핑크 고양이',
+    nameKo: '핑크 스킨',
     type: 'skin',
     rarity: 1,
-    compatibleCharacters: ['cat'],
+    compatibleCharacters: 'all',
     assetData: 'hue-rotate(330deg) saturate(1.4) brightness(1.05)',
     emoji: '🩷',
   },
   {
     id: 'skin_fox_purple',
-    nameKo: '보라 여우',
+    nameKo: '보라 스킨',
     type: 'skin',
     rarity: 1,
-    compatibleCharacters: ['fox'],
+    compatibleCharacters: 'all',
     assetData: 'hue-rotate(270deg) saturate(1.3)',
     emoji: '💜',
   },
@@ -192,19 +192,19 @@ export const ALL_ITEMS: ItemDefinition[] = [
   // ── 2★ Skins ──────────────────────────────────────────
   {
     id: 'skin_cat_blue',
-    nameKo: '파란 고양이',
+    nameKo: '파랑 스킨',
     type: 'skin',
     rarity: 2,
-    compatibleCharacters: ['cat'],
+    compatibleCharacters: 'all',
     assetData: 'hue-rotate(200deg) saturate(1.5) brightness(1.1)',
     emoji: '💙',
   },
   {
     id: 'skin_fox_gold',
-    nameKo: '황금 여우',
+    nameKo: '황금 스킨',
     type: 'skin',
     rarity: 2,
-    compatibleCharacters: ['fox'],
+    compatibleCharacters: 'all',
     assetData: 'sepia(0.6) hue-rotate(10deg) saturate(1.8) brightness(1.15)',
     emoji: '✨',
   },
@@ -212,21 +212,41 @@ export const ALL_ITEMS: ItemDefinition[] = [
   // ── 3★ Skins ──────────────────────────────────────────
   {
     id: 'skin_cat_galaxy',
-    nameKo: '은하수 고양이',
+    nameKo: '은하수 스킨',
     type: 'skin',
     rarity: 3,
-    compatibleCharacters: ['cat'],
+    compatibleCharacters: 'all',
     assetData: 'hue-rotate(240deg) saturate(2) brightness(1.2) contrast(1.1)',
     emoji: '🌌',
   },
   {
     id: 'skin_fox_rainbow',
-    nameKo: '무지개 여우',
+    nameKo: '무지개 스킨',
     type: 'skin',
     rarity: 3,
-    compatibleCharacters: ['fox'],
+    compatibleCharacters: 'all',
     assetData: 'hue-rotate(180deg) saturate(2.2) brightness(1.15)',
     emoji: '🌈',
+  },
+
+  // ── 3★ Characters ──────────────────────────────────────
+  {
+    id: 'char_cat',
+    nameKo: '고양이',
+    type: 'character',
+    rarity: 3,
+    compatibleCharacters: 'all',
+    assetData: 'cat.png',
+    emoji: '🐱',
+  },
+  {
+    id: 'char_fox',
+    nameKo: '여우',
+    type: 'character',
+    rarity: 3,
+    compatibleCharacters: 'all',
+    assetData: 'fox.png',
+    emoji: '🦊',
   },
 ];
 
@@ -236,7 +256,7 @@ export const ALL_ITEMS: ItemDefinition[] = [
 
 export const ROLL_RATES = { 1: 70, 2: 20, 3: 10 } as const;
 
-export function rollItemBox(character: CharacterType): ItemDefinition {
+export function rollItemBox(_character: CharacterType): ItemDefinition {
   const rand = Math.random() * 100;
   let targetRarity: Rarity;
 
@@ -244,12 +264,12 @@ export function rollItemBox(character: CharacterType): ItemDefinition {
   else if (rand < 90) targetRarity = 2;
   else                targetRarity = 3;
 
+  // Character items are excluded from random gacha (obtained only via synthesis)
   const pool = ALL_ITEMS.filter(
-    i => i.rarity === targetRarity &&
-      (i.compatibleCharacters === 'all' || (i.compatibleCharacters as CharacterType[]).includes(character))
+    i => i.rarity === targetRarity && i.type !== 'character'
   );
 
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && (i.compatibleCharacters === 'all' || (i.compatibleCharacters as CharacterType[]).includes(character)));
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && i.type !== 'character');
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
@@ -267,7 +287,7 @@ export const SYNTHESIS_REQUIRED = 10; // same-rarity items needed
  *   - +1 rarity:                 50%   (capped at 3)
  *   - -1 rarity (penalty):        5%   (only when inputRarity >= 2)
  */
-export function synthesizeItems(inputRarity: Rarity, character: CharacterType): ItemDefinition {
+export function synthesizeItems(inputRarity: Rarity, _character: CharacterType): ItemDefinition {
   const rand = Math.random() * 100;
   let outputRarity: Rarity;
 
@@ -279,11 +299,14 @@ export function synthesizeItems(inputRarity: Rarity, character: CharacterType): 
     outputRarity = inputRarity;
   }
 
-  const pool = ALL_ITEMS.filter(
-    i => i.rarity === outputRarity &&
-      (i.compatibleCharacters === 'all' || (i.compatibleCharacters as CharacterType[]).includes(character))
-  );
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1);
+  // 3★ synthesis has a 20% chance to yield a character item
+  if (outputRarity === 3 && Math.random() < 0.2) {
+    const charPool = ALL_ITEMS.filter(i => i.type === 'character');
+    return charPool[Math.floor(Math.random() * charPool.length)];
+  }
+
+  const pool = ALL_ITEMS.filter(i => i.rarity === outputRarity && i.type !== 'character');
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && i.type !== 'character');
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
@@ -387,4 +410,5 @@ export const ITEM_TYPE_LABEL: Record<ItemType, string> = {
   background: '배경',
   accessory: '악세서리',
   skin: '스킨',
+  character: '캐릭터',
 };

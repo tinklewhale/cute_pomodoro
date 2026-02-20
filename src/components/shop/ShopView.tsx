@@ -48,11 +48,8 @@ function rollByTier(tierId: BoxTierId, character: 'cat' | 'fox'): ItemDefinition
     targetRarity = rand < 50 ? 2 : 3;
   }
 
-  const pool = ALL_ITEMS.filter(
-    (i) => i.rarity === targetRarity &&
-      (i.compatibleCharacters === 'all' || (i.compatibleCharacters as string[]).includes(character))
-  );
-  const fallback = ALL_ITEMS.filter((i) => i.rarity === 1);
+  const pool = ALL_ITEMS.filter((i) => i.rarity === targetRarity && i.type !== 'character');
+  const fallback = ALL_ITEMS.filter((i) => i.rarity === 1 && i.type !== 'character');
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
