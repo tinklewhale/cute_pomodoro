@@ -448,27 +448,30 @@ export const useGameStore = create<GameState>()(
           const token = crypto.randomUUID();
           localStorage.setItem(SESSION_TOKEN_KEY, token);
 
-          // DB에 비동기로 session_token 기록
-          void supabase
-            .from('user_profiles')
-            .update({ session_token: token })
-            .eq('user_id', userId);
+          // Realtime Broadcast: DB 변경 없이 WebSocket으로 동시 로그인 감지
+          // postgres_changes + RLS 문제 없이 동작
+          const ch = supabase
+            .channel(`user-logins:${userId}`)
+            .on('broadcast', { event: 'new-session' }, ({ payload }) => {
+              const incomingToken = payload?.token as string | undefined;
+              const myToken = localStorage.getItem(SESSION_TOKEN_KEY);
+              if (incomingToken && myToken && incomingToken !== myToken) {
+                // 다른 기기에서 같은 계정으로 로그인됨
+                set({ sessionConflict: true });
+              }
+            })
+            .subscribe(async (status) => {
+              if (status === 'SUBSCRIBED') {
+                // 구독 완료 후 현재 기기 토큰 브로드캐스트 → 기존 기기에서 충돌 감지
+                await ch.send({
+                  type: 'broadcast',
+                  event: 'new-session',
+                  payload: { token },
+                });
+              }
+            });
 
-          // Realtime 구독: 다른 기기에서 session_token 변경 시 감지
-          profileChannel = supabase
-            .channel(`profile-session:${userId}`)
-            .on(
-              'postgres_changes',
-              { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `user_id=eq.${userId}` },
-              (payload) => {
-                const newToken = (payload.new as Record<string, unknown>).session_token as string | null;
-                const myToken = localStorage.getItem(SESSION_TOKEN_KEY);
-                if (newToken && myToken && newToken !== myToken) {
-                  set({ sessionConflict: true });
-                }
-              },
-            )
-            .subscribe();
+          profileChannel = ch;
         }
       },
 
