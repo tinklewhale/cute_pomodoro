@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Home, Users, CalendarDays, Backpack } from 'lucide-react';
 import { useGameStore } from './features/game/useGameStore';
@@ -90,15 +90,46 @@ function App() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timerStatus]);
 
-  // ── Broadcast timer status to room ────────────────────────
+  // ── Broadcast timer status to room (idle은 3초 디바운스) ──
+  const idleBroadcastRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!roomId) return;
     const mapped: MemberTimerStatus =
       timerStatus === 'running'   ? 'running'   :
       timerStatus === 'paused'    ? 'paused'    :
       timerStatus === 'completed' ? 'completed' : 'idle';
+
+    if (mapped === 'idle') {
+      // 사이클 전환 중 순간적인 idle 방송 방지 — 3초 후에만 방송
+      idleBroadcastRef.current = setTimeout(() => {
+        void broadcastTimerStatus(SESSION_USER_ID, 'idle');
+      }, 3000);
+      return () => {
+        if (idleBroadcastRef.current) clearTimeout(idleBroadcastRef.current);
+      };
+    }
+    // running/paused/completed: 대기 중인 idle 방송 취소 후 즉시 방송
+    if (idleBroadcastRef.current) {
+      clearTimeout(idleBroadcastRef.current);
+      idleBroadcastRef.current = null;
+    }
     void broadcastTimerStatus(SESSION_USER_ID, mapped);
   }, [timerStatus, roomId, broadcastTimerStatus]);
+
+  // ── 실시간 진행시간 방송 (10초마다, focus 모드 running 중에만) ──
+  useEffect(() => {
+    if (!roomId || timerStatus !== 'running' || timerMode !== 'focus') return;
+    const id = setInterval(() => {
+      const { timeLeft: tl, focusDuration: fd } = useTimerStore.getState();
+      const { sessionHistory } = useGameStore.getState();
+      const todayStr = new Date().toISOString().split('T')[0];
+      const base = sessionHistory
+        .filter((r) => r.date === todayStr)
+        .reduce((sum, r) => sum + r.durationSeconds, 0);
+      void broadcastFocusSeconds(SESSION_USER_ID, base + (fd - tl));
+    }, 10_000);
+    return () => clearInterval(id);
+  }, [roomId, timerStatus, timerMode, broadcastFocusSeconds]);
 
   const handleSignOut = async () => {
     playClick();

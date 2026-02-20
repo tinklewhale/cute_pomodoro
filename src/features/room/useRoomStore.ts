@@ -26,8 +26,8 @@ interface RoomState {
   channel: RealtimeChannel | null;
 
   // Actions
-  createRoom: (userId: string, nickname: string, characterId: CharacterType, focusSecondsToday?: number) => Promise<void>;
-  joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType, focusSecondsToday?: number) => Promise<void>;
+  createRoom: (userId: string, nickname: string, characterId: CharacterType, timerStatus?: MemberTimerStatus, focusSecondsToday?: number) => Promise<void>;
+  joinRoom: (code: string, userId: string, nickname: string, characterId: CharacterType, timerStatus?: MemberTimerStatus, focusSecondsToday?: number) => Promise<void>;
   leaveRoom: (userId: string) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
@@ -109,7 +109,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   // ── createRoom ──────────────────────────────────
-  createRoom: async (userId, nickname, characterId, focusSecondsToday = 0) => {
+  createRoom: async (userId, nickname, characterId, timerStatus = 'idle', focusSecondsToday = 0) => {
     const code = generateCode();
     const roomId = `room_${code}`;
 
@@ -131,7 +131,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         user_id:   userId,
         nickname,
         character_id:        characterId,
-        timer_status:        'idle',
+        timer_status:        timerStatus,
         focus_seconds_today: focusSecondsToday,
       });
 
@@ -144,7 +144,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   },
 
   // ── joinRoom ────────────────────────────────────
-  joinRoom: async (code, userId, nickname, characterId, focusSecondsToday = 0) => {
+  joinRoom: async (code, userId, nickname, characterId, timerStatus = 'idle', focusSecondsToday = 0) => {
     const roomId = `room_${code.toUpperCase()}`;
 
     // Check room exists
@@ -178,7 +178,7 @@ export const useRoomStore = create<RoomState>((set, get) => ({
         user_id:   userId,
         nickname,
         character_id:        characterId,
-        timer_status:        'idle',
+        timer_status:        timerStatus,
         focus_seconds_today: focusSecondsToday,
       });
 

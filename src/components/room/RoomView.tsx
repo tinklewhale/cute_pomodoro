@@ -28,6 +28,12 @@ export const RoomView: React.FC = () => {
   const { selectedCharacter, nickname, unlockAchievement, sessionHistory } = useGameStore();
   const { timeLeft, status: timerStatus, mode: timerMode, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
 
+  // 방 참여/생성 시 DB에 기록할 현재 타이머 상태
+  const timerStatusForRoom: MemberTimerStatus =
+    timerStatus === 'running'   ? 'running'   :
+    timerStatus === 'paused'    ? 'paused'    :
+    timerStatus === 'completed' ? 'completed' : 'idle';
+
   const [tab, setTab] = useState<'create' | 'join'>('create');
   const [joinCode, setJoinCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +50,7 @@ export const RoomView: React.FC = () => {
     if (loading) return;
     playClick();
     setLoading(true);
-    await createRoom(SESSION_USER_ID, nickname || '익명', selectedCharacter, todaySeconds);
+    await createRoom(SESSION_USER_ID, nickname || '익명', selectedCharacter, timerStatusForRoom, todaySeconds);
     setLoading(false);
     unlockAchievement('ach_friends');
   };
@@ -53,7 +59,7 @@ export const RoomView: React.FC = () => {
     if (!joinCode.trim() || loading) return;
     playClick();
     setLoading(true);
-    await joinRoom(joinCode.trim(), SESSION_USER_ID, nickname || '익명', selectedCharacter, todaySeconds);
+    await joinRoom(joinCode.trim(), SESSION_USER_ID, nickname || '익명', selectedCharacter, timerStatusForRoom, todaySeconds);
     setLoading(false);
     if (!error) unlockAchievement('ach_friends');
   };
