@@ -128,11 +128,17 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn, get: () =
             return { members: [...s.members, newMem] };
           }
           if (eventType === 'UPDATE') {
-            // DB 업데이트는 timerSecondsLeft·timerUpdatedAt을 보존 (Broadcast로 관리)
+            // DB 업데이트는 timerStatus, focusSecondsToday, nickname 만 참조
+            // 캐릭터 및 착용 아이템 등은 브로드캐스트된 실시간 상태(Local state)를 우선시함.
             const updated = toMember(newRow as Record<string, unknown>);
             return {
               members: s.members.map((m) => m.userId === updated.userId
-                ? { ...m, ...updated, timerSecondsLeft: m.timerSecondsLeft, timerUpdatedAt: m.timerUpdatedAt }
+                ? { 
+                    ...m, 
+                    timerStatus: updated.timerStatus,
+                    focusSecondsToday: updated.focusSecondsToday,
+                    nickname: updated.nickname
+                  }
                 : m
               ),
             };
