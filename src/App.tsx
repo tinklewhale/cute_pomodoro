@@ -36,7 +36,7 @@ function App() {
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
           advanceCycle, advanceToFocus,
           timeLeft, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
-  const { roomId, broadcastTimerStatus, broadcastFocusSeconds } = useRoomStore();
+  const { roomId, broadcastTimerStatus, broadcastFocusSeconds, broadcastTimerTick } = useRoomStore();
 
   const [tab, setTab]               = useState<Tab>('home');
   const [showShop, setShowShop]     = useState(false);
@@ -142,6 +142,17 @@ function App() {
     }, 10_000);
     return () => clearInterval(id);
   }, [roomId, timerStatus, timerMode, broadcastFocusSeconds]);
+
+  // ── 타이머 남은 시간 방송 (5초마다, 상대방 카드에 표시용) ──
+  useEffect(() => {
+    if (!roomId || timerStatus !== 'running' || timerMode !== 'focus') return;
+    // 시작 즉시 한 번 방송
+    void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
+    const id = setInterval(() => {
+      void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [roomId, timerStatus, timerMode, broadcastTimerTick]);
 
   const handleSignOut = async () => {
     playClick();

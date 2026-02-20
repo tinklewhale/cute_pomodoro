@@ -15,6 +15,8 @@ export interface RoomMember {
   characterId: CharacterType;
   timerStatus: MemberTimerStatus;
   focusSecondsToday: number;
+  timerSecondsLeft: number;   // 남은 타이머 (Broadcast로 동기화, DB 컬럼 없음)
+  timerUpdatedAt: number;     // 마지막 업데이트 timestamp (클라이언트 보간용)
 }
 
 interface RoomState {
@@ -31,6 +33,7 @@ interface RoomState {
   leaveRoom: (userId: string) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
+  broadcastTimerTick: (userId: string, seconds: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -57,6 +60,8 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
     characterId:        row.character_id as CharacterType,
     timerStatus:        (row.timer_status as MemberTimerStatus) ?? 'idle',
     focusSecondsToday:  (row.focus_seconds_today as number) ?? 0,
+    timerSecondsLeft:   0,
+    timerUpdatedAt:     Date.now(),
   });
 
   const { data: initialMembers } = await supabase
@@ -78,8 +83,14 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
             return { members: [...s.members, toMember(newRow as Record<string, unknown>)] };
           }
           if (eventType === 'UPDATE') {
+            // DB 업데이트는 timerSecondsLeft·timerUpdatedAt을 보존 (Broadcast로 관리)
             const updated = toMember(newRow as Record<string, unknown>);
-            return { members: s.members.map((m) => m.userId === updated.userId ? updated : m) };
+            return {
+              members: s.members.map((m) => m.userId === updated.userId
+                ? { ...updated, timerSecondsLeft: m.timerSecondsLeft, timerUpdatedAt: m.timerUpdatedAt }
+                : m
+              ),
+            };
           }
           if (eventType === 'DELETE') {
             const deletedId = (oldRow as Record<string, unknown>)?.user_id as string;
@@ -89,6 +100,17 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
         });
       }
     )
+    .on('broadcast', { event: 'timer-tick' }, ({ payload }) => {
+      // 상대방 타이머 남은 시간 수신 (DB 없이 Broadcast로만 동기화)
+      const { userId, seconds } = payload as { userId: string; seconds: number };
+      set((s) => ({
+        members: s.members.map((m) =>
+          m.userId === userId
+            ? { ...m, timerSecondsLeft: seconds, timerUpdatedAt: Date.now() }
+            : m
+        ),
+      }));
+    })
     .subscribe();
 
   set({ roomId, roomCode: code, members, isConnected: true, channel, error: null });
@@ -239,6 +261,18 @@ export const useRoomStore = create<RoomState>((set, get) => ({
       .update({ focus_seconds_today: seconds })
       .eq('room_id', roomId)
       .eq('user_id', userId);
+  },
+
+  // ── broadcastTimerTick ──────────────────────────
+  // DB 없이 Broadcast 채널로 타이머 남은 시간 전송
+  broadcastTimerTick: async (userId, seconds) => {
+    const { channel } = get();
+    if (!channel) return;
+    await channel.send({
+      type: 'broadcast',
+      event: 'timer-tick',
+      payload: { userId, seconds },
+    });
   },
 
 }));

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Copy, LogOut, Users } from 'lucide-react';
 import { useRoomStore } from '../../features/room/useRoomStore';
@@ -23,10 +23,27 @@ function toHHMM(seconds: number) {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// 상대방 타이머: 마지막 수신 시각 기준으로 보간해 현재 남은 초 계산
+function interpolateSeconds(secondsLeft: number, updatedAt: number, status: MemberTimerStatus): number {
+  if (status !== 'running') return secondsLeft;
+  const elapsed = Math.floor((Date.now() - updatedAt) / 1000);
+  return Math.max(0, secondsLeft - elapsed);
+}
+
 export const RoomView: React.FC = () => {
   const { roomId, roomCode, members, isConnected, error, createRoom, joinRoom, leaveRoom, clearError } = useRoomStore();
   const { selectedCharacter, nickname, unlockAchievement, sessionHistory } = useGameStore();
   const { timeLeft, status: timerStatus, mode: timerMode, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
+
+  // 상대방 타이머 보간을 위해 1초마다 리렌더
+  const [, forceUpdate] = useState(0);
+  const tick = useCallback(() => forceUpdate((n) => n + 1), []);
+  useEffect(() => {
+    const hasRunning = members.some((m) => m.timerStatus === 'running' && m.userId !== SESSION_USER_ID);
+    if (!hasRunning) return;
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [members, tick]);
 
   // 방 참여/생성 시 DB에 기록할 현재 타이머 상태
   const timerStatusForRoom: MemberTimerStatus =
@@ -187,7 +204,7 @@ export const RoomView: React.FC = () => {
                   {idx + 1}
                 </div>
 
-                {/* Character with timer pill overlay for my card */}
+                {/* Character with timer pill overlay */}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <img
                     src={`/characters/${member.characterId}.png`}
@@ -211,6 +228,26 @@ export const RoomView: React.FC = () => {
                       {pad(Math.floor(timeLeft / 60))}:{pad(timeLeft % 60)}
                     </div>
                   )}
+                  {!isMe && member.timerStatus === 'running' && member.timerSecondsLeft > 0 && (() => {
+                    const secs = interpolateSeconds(member.timerSecondsLeft, member.timerUpdatedAt, member.timerStatus);
+                    return secs > 0 ? (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: -7, left: '50%',
+                        transform: 'translateX(-50%)',
+                        background: 'var(--rose)',
+                        color: '#fff',
+                        fontSize: '0.52rem',
+                        fontWeight: 900,
+                        padding: '1px 5px',
+                        borderRadius: 99,
+                        whiteSpace: 'nowrap',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
+                      }}>
+                        {pad(Math.floor(secs / 60))}:{pad(secs % 60)}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
 
                 {/* Info */}
