@@ -43,7 +43,7 @@ interface RoomState {
   broadcastProfileUpdate: (userId: string, characterId: CharacterType, equippedBackground: string | null, equippedAccessory: string | null, equippedSkin: string | null) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
-  broadcastTimerTick: (userId: string, seconds: number, mode?: string, cycleInSet?: number, cyclesUntilLongBreak?: number) => Promise<void>;
+  broadcastTimerTick: (userId: string, seconds: number, mode?: 'focus' | 'shortBreak' | 'longBreak', cycleInSet?: number, cyclesUntilLongBreak?: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -380,6 +380,16 @@ export const useRoomStore = create<RoomState>((set, get) => ({
   // ── broadcastTimerTick ──────────────────────────
   // DB 없이 Broadcast 채널로 타이머 남은 시간 전송
   broadcastTimerTick: async (userId, seconds, mode, cycleInSet, cyclesUntilLongBreak) => {
+    // 1. 송신자 본인의 화면(특히 좌측 캐릭터 패널)에 즉시 반영되도록 Local Store 업데이트
+    set((s) => ({
+      members: s.members.map((m) =>
+        m.userId === userId
+          ? { ...m, timerSecondsLeft: seconds, timerUpdatedAt: Date.now(), timerMode: mode, cycleInSet, cyclesUntilLongBreak }
+          : m
+      ),
+    }));
+
+    // 2. 방 안의 다른 친구들에게 브로드캐스트 전송
     const { channel } = get();
     if (!channel) return;
     await channel.send({
