@@ -1,8 +1,14 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { ItemDefinition, CharacterType } from '../../data/items';
 import { ACHIEVEMENTS } from '../../data/items';
 import { supabase } from '../../lib/supabase';
+
+// ── Session token (concurrent login detection) ────────────
+const SESSION_TOKEN_KEY = 'cute-pomodoro-session-token';
+let profileChannel: RealtimeChannel | null = null;
+let sessionInitialized = false;
 
 // =========================================================
 // Types
@@ -69,6 +75,9 @@ interface GameState {
   synthesizeAndConsume: (instanceIds: string[], result: ItemDefinition) => void;
 
   equipCharacter: (char: CharacterType) => void;
+
+  // Concurrent session state
+  sessionConflict: boolean;
 
   // Cloud sync actions
   loadFromCloud: (userId: string) => Promise<void>;
@@ -173,6 +182,7 @@ export const useGameStore = create<GameState>()(
 
       userId: null,
       isSyncing: false,
+      sessionConflict: false,
 
       // ── selectCharacter ──────────────────────────
       selectCharacter: (char, nick) => {
@@ -375,6 +385,21 @@ export const useGameStore = create<GameState>()(
           return;
         }
 
+        // ── Equipped fallback ─────────────────────────
+        const localEquipped = get().equipped;
+        const cloudEquipped = {
+          background: profile.equipped_background ?? null,
+          accessory:  profile.equipped_accessory  ?? null,
+          skin:       profile.equipped_skin        ?? null,
+        };
+        const hasLocalEquipped = Object.values(localEquipped).some(v => v !== null);
+        const hasCloudEquipped = Object.values(cloudEquipped).some(v => v !== null);
+        // 클라우드가 모두 null이고 로컬에 장착 아이템이 있으면 로컬 보존 (sync 실패 대비)
+        const equippedToSet = (!hasCloudEquipped && hasLocalEquipped) ? localEquipped : cloudEquipped;
+        if (!hasCloudEquipped && hasLocalEquipped) {
+          console.warn('[loadFromCloud] cloud equipped empty — keeping local equipped (possible sync failure)');
+        }
+
         set({
           userId,
           isSyncing: false,
@@ -382,11 +407,7 @@ export const useGameStore = create<GameState>()(
           selectedCharacter:  profile.selected_character as CharacterType,
           hasChosenCharacter: profile.has_chosen_character,
           coins:              profile.coins,
-          equipped: {
-            background: profile.equipped_background ?? null,
-            accessory:  profile.equipped_accessory  ?? null,
-            skin:       profile.equipped_skin        ?? null,
-          },
+          equipped: equippedToSet,
           inventory: (() => {
             const cloudInv = (invResult.data ?? []).map((r) => ({
               instanceId:   r.instance_id,
@@ -414,10 +435,53 @@ export const useGameStore = create<GameState>()(
             return { id: a.id, unlockedAt: cloud?.unlocked_at ?? local?.unlockedAt ?? null };
           }),
         });
+
+        // 로컬 equipped 보존 시 클라우드에도 즉시 업로드
+        if (!hasCloudEquipped && hasLocalEquipped) {
+          void syncProfile(userId, get());
+        }
+
+        // ── Session token (동시 로그인 감지) ─────────────
+        // 페이지 로드당 1회만 실행 (TOKEN_REFRESHED 이벤트 중복 방지)
+        if (!sessionInitialized) {
+          sessionInitialized = true;
+          const token = crypto.randomUUID();
+          localStorage.setItem(SESSION_TOKEN_KEY, token);
+
+          // DB에 비동기로 session_token 기록
+          void supabase
+            .from('user_profiles')
+            .update({ session_token: token })
+            .eq('user_id', userId);
+
+          // Realtime 구독: 다른 기기에서 session_token 변경 시 감지
+          profileChannel = supabase
+            .channel(`profile-session:${userId}`)
+            .on(
+              'postgres_changes',
+              { event: 'UPDATE', schema: 'public', table: 'user_profiles', filter: `user_id=eq.${userId}` },
+              (payload) => {
+                const newToken = (payload.new as Record<string, unknown>).session_token as string | null;
+                const myToken = localStorage.getItem(SESSION_TOKEN_KEY);
+                if (newToken && myToken && newToken !== myToken) {
+                  set({ sessionConflict: true });
+                }
+              },
+            )
+            .subscribe();
+        }
       },
 
       // ── clearUserId ──────────────────────────────
-      clearUserId: () => set({ userId: null }),
+      clearUserId: () => {
+        if (profileChannel) {
+          void supabase.removeChannel(profileChannel);
+          profileChannel = null;
+        }
+        sessionInitialized = false;
+        localStorage.removeItem(SESSION_TOKEN_KEY);
+        set({ userId: null, sessionConflict: false });
+      },
 
       // ── resetForNewAccount ───────────────────────
       resetForNewAccount: () => set({

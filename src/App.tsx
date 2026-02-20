@@ -30,7 +30,8 @@ const NAV_TABS: { id: Tab; labelKo: string; icon: React.ReactNode }[] = [
 
 function App() {
   const { hasChosenCharacter, coins, selectedCharacter, nickname, loadFromCloud, clearUserId,
-          addCoins, addSessionRecord, setPendingReward, unlockAchievement } = useGameStore();
+          addCoins, addSessionRecord, setPendingReward, unlockAchievement,
+          sessionConflict } = useGameStore();
   const { user, status: authStatus, signOut } = useAuthStore();
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
           advanceCycle, advanceToFocus,
@@ -51,6 +52,17 @@ function App() {
     return unsubscribe;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Session conflict: 다른 기기 로그인 감지 → 자동 로그아웃 ──
+  useEffect(() => {
+    if (!sessionConflict) return;
+    const t = setTimeout(async () => {
+      await signOut();
+      clearUserId();
+    }, 2500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionConflict]);
 
   // ── Global tick interval (runs regardless of active tab) ──
   useEffect(() => {
@@ -486,6 +498,37 @@ function App() {
               setShowAuth(false);
             }}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Session conflict toast */}
+      <AnimatePresence>
+        {sessionConflict && (
+          <motion.div
+            key="session-conflict"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            style={{
+              position: 'fixed',
+              top: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 999,
+              background: '#FFF0F3',
+              border: '2px solid var(--rose)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '12px 20px',
+              fontWeight: 800,
+              fontSize: '0.88rem',
+              color: 'var(--rose)',
+              boxShadow: 'var(--shadow-lg)',
+              textAlign: 'center',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            📱 다른 기기에서 로그인되어 자동 로그아웃됩니다...
+          </motion.div>
         )}
       </AnimatePresence>
 
