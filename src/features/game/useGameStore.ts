@@ -94,8 +94,8 @@ const initialAchievements: AchievementRecord[] = ACHIEVEMENTS.map((a) => ({
 // ── Fire-and-forget cloud sync helpers ──────────────────────
 // These run in the background after local state is updated.
 
-function syncProfile(userId: string, s: GameState) {
-  void supabase.from('user_profiles').upsert(
+async function syncProfile(userId: string, s: GameState): Promise<void> {
+  const { error } = await supabase.from('user_profiles').upsert(
     {
       user_id:              userId,
       nickname:             s.nickname,
@@ -109,40 +109,46 @@ function syncProfile(userId: string, s: GameState) {
     },
     { onConflict: 'user_id' },
   );
+  if (error) console.error('[sync] profile upsert failed:', error);
 }
 
-function syncInventoryFull(userId: string, inventory: InventoryItem[]) {
+async function syncInventoryFull(userId: string, inventory: InventoryItem[]): Promise<void> {
   // Delete all rows then re-insert (simpler than diffing for small sets)
-  void supabase
+  const { error: delErr } = await supabase
     .from('user_inventory')
     .delete()
-    .eq('user_id', userId)
-    .then(() => {
-      if (inventory.length === 0) return;
-      void supabase.from('user_inventory').insert(
-        inventory.map((i) => ({
-          user_id:       userId,
-          instance_id:   i.instanceId,
-          definition_id: i.definitionId,
-        })),
-      );
-    });
+    .eq('user_id', userId);
+  if (delErr) {
+    console.error('[sync] inventory delete failed:', delErr);
+    return;
+  }
+  if (inventory.length === 0) return;
+  const { error: insErr } = await supabase.from('user_inventory').insert(
+    inventory.map((i) => ({
+      user_id:       userId,
+      instance_id:   i.instanceId,
+      definition_id: i.definitionId,
+    })),
+  );
+  if (insErr) console.error('[sync] inventory insert failed:', insErr);
 }
 
-function syncSessionAppend(userId: string, record: SessionRecord) {
-  void supabase.from('user_sessions').insert({
+async function syncSessionAppend(userId: string, record: SessionRecord): Promise<void> {
+  const { error } = await supabase.from('user_sessions').insert({
     user_id:          userId,
     session_date:     record.date,
     started_at:       record.startedAt,
     duration_seconds: record.durationSeconds,
   });
+  if (error) console.error('[sync] session append failed:', error);
 }
 
-function syncAchievementUnlock(userId: string, id: string, unlockedAt: string) {
-  void supabase.from('user_achievements').upsert(
+async function syncAchievementUnlock(userId: string, id: string, unlockedAt: string): Promise<void> {
+  const { error } = await supabase.from('user_achievements').upsert(
     { user_id: userId, achievement_id: id, unlocked_at: unlockedAt },
     { onConflict: 'user_id,achievement_id' },
   );
+  if (error) console.error('[sync] achievement unlock failed:', error);
 }
 
 // =========================================================
@@ -342,6 +348,16 @@ export const useGameStore = create<GameState>()(
             .eq('user_id', userId),
         ]);
 
+        // 조회 에러 발생 시 로컬 데이터를 보존하고 userId만 세팅
+        if (invResult.error || sessResult.error || achResult.error) {
+          console.error(
+            '[loadFromCloud] fetch error:',
+            invResult.error, sessResult.error, achResult.error,
+          );
+          set({ userId, isSyncing: false });
+          return;
+        }
+
         set({
           userId,
           isSyncing: false,
@@ -354,10 +370,19 @@ export const useGameStore = create<GameState>()(
             accessory:  profile.equipped_accessory  ?? null,
             skin:       profile.equipped_skin        ?? null,
           },
-          inventory: (invResult.data ?? []).map((r) => ({
-            instanceId:   r.instance_id,
-            definitionId: r.definition_id,
-          })),
+          inventory: (() => {
+            const cloudInv = (invResult.data ?? []).map((r) => ({
+              instanceId:   r.instance_id,
+              definitionId: r.definition_id,
+            }));
+            const localInv = get().inventory;
+            // 클라우드가 비었는데 로컬에 아이템이 있으면 sync가 실패한 것으로 간주해 로컬 보존
+            if (cloudInv.length === 0 && localInv.length > 0) {
+              console.warn('[loadFromCloud] cloud inventory empty — keeping local inventory (possible sync failure)');
+              return localInv;
+            }
+            return cloudInv;
+          })(),
           sessionHistory: (sessResult.data ?? []).map((r) => ({
             date:            r.session_date,
             startedAt:       r.started_at,
@@ -367,7 +392,9 @@ export const useGameStore = create<GameState>()(
             const cloud = (achResult.data ?? []).find(
               (r) => r.achievement_id === a.id,
             );
-            return { id: a.id, unlockedAt: cloud?.unlocked_at ?? null };
+            const local = get().achievements.find((l) => l.id === a.id);
+            // 클라우드·로컬 중 unlockedAt이 있는 쪽 우선 (업적은 다시 잠기지 않으므로 안전)
+            return { id: a.id, unlockedAt: cloud?.unlocked_at ?? local?.unlockedAt ?? null };
           }),
         });
       },

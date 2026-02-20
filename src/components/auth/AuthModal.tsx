@@ -8,7 +8,7 @@ type AuthTab = '로그인' | '회원가입';
 
 interface AuthModalProps {
   onClose: () => void;
-  onSuccess: (userId: string) => void;
+  onSuccess: () => void;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
@@ -31,8 +31,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose, onSuccess }) => {
     e.preventDefault();
     clearError();
 
-    const cb = (userId: string) => {
-      onSuccess(userId);
+    const cb = () => {
+      onSuccess();
       onClose();
     };
 

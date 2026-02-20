@@ -451,8 +451,7 @@ function App() {
         {showAuth && (
           <AuthModal
             onClose={() => setShowAuth(false)}
-            onSuccess={(userId) => {
-              void loadFromCloud(userId);
+            onSuccess={() => {
               setShowAuth(false);
             }}
           />
