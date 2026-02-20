@@ -528,7 +528,7 @@ function App() {
                     style={{
                       position: 'absolute',
                       bottom: -1,
-                      left: '50%', transform: 'translateX(-50%)',
+                      left: 0, right: 0, margin: '0 auto',
                       width: 24, height: 3,
                       borderRadius: 'var(--radius-full)',
                       background: 'var(--rose)',
