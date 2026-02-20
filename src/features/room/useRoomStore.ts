@@ -17,6 +17,12 @@ export interface RoomMember {
   focusSecondsToday: number;
   timerSecondsLeft: number;   // 남은 타이머 (Broadcast로 동기화, DB 컬럼 없음)
   timerUpdatedAt: number;     // 마지막 업데이트 timestamp (클라이언트 보간용)
+  timerMode?: 'focus' | 'shortBreak' | 'longBreak';
+  cycleInSet?: number;
+  cyclesUntilLongBreak?: number;
+  equippedBackground?: string | null;
+  equippedAccessory?: string | null;
+  equippedSkin?: string | null;
 }
 
 interface RoomState {
@@ -33,7 +39,7 @@ interface RoomState {
   leaveRoom: (userId: string) => Promise<void>;
   broadcastTimerStatus: (userId: string, status: MemberTimerStatus) => Promise<void>;
   broadcastFocusSeconds: (userId: string, seconds: number) => Promise<void>;
-  broadcastTimerTick: (userId: string, seconds: number) => Promise<void>;
+  broadcastTimerTick: (userId: string, seconds: number, mode?: string, cycleInSet?: number, cyclesUntilLongBreak?: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -69,7 +75,24 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
     .select('user_id, nickname, character_id, timer_status, focus_seconds_today')
     .eq('room_id', roomId);
 
-  const members: RoomMember[] = (initialMembers ?? []).map(toMember);
+  // Fetch equipped items for existing members
+  const memberIds = (initialMembers ?? []).map((m) => m.user_id as string);
+  const { data: profilesData } = await supabase
+    .from('user_profiles')
+    .select('user_id, equipped_background, equipped_accessory, equipped_skin')
+    .in('user_id', memberIds);
+
+  const profileMap = new Map(profilesData?.map((p) => [p.user_id, p]) ?? []);
+
+  const members: RoomMember[] = (initialMembers ?? []).map((row) => {
+    const prof = profileMap.get(row.user_id as string);
+    return {
+      ...toMember(row as Record<string, unknown>),
+      equippedBackground: prof?.equipped_background,
+      equippedAccessory:  prof?.equipped_accessory,
+      equippedSkin:       prof?.equipped_skin,
+    };
+  });
 
   const channel = supabase
     .channel(`room:${roomId}`)
@@ -80,14 +103,32 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
         const { eventType, new: newRow, old: oldRow } = payload;
         set((s) => {
           if (eventType === 'INSERT') {
-            return { members: [...s.members, toMember(newRow as Record<string, unknown>)] };
+            const newMem = toMember(newRow as Record<string, unknown>);
+            // Async fetch profile and update again
+            supabase
+              .from('user_profiles')
+              .select('equipped_background, equipped_accessory, equipped_skin')
+              .eq('user_id', newMem.userId)
+              .single()
+              .then(({ data }) => {
+                if (data) {
+                  set((st) => ({
+                    members: st.members.map((m) =>
+                      m.userId === newMem.userId
+                        ? { ...m, equippedBackground: data.equipped_background, equippedAccessory: data.equipped_accessory, equippedSkin: data.equipped_skin }
+                        : m
+                    ),
+                  }));
+                }
+              });
+            return { members: [...s.members, newMem] };
           }
           if (eventType === 'UPDATE') {
             // DB 업데이트는 timerSecondsLeft·timerUpdatedAt을 보존 (Broadcast로 관리)
             const updated = toMember(newRow as Record<string, unknown>);
             return {
               members: s.members.map((m) => m.userId === updated.userId
-                ? { ...updated, timerSecondsLeft: m.timerSecondsLeft, timerUpdatedAt: m.timerUpdatedAt }
+                ? { ...m, ...updated, timerSecondsLeft: m.timerSecondsLeft, timerUpdatedAt: m.timerUpdatedAt }
                 : m
               ),
             };
@@ -102,11 +143,11 @@ async function subscribeRoom(roomId: string, code: string, set: SetFn) {
     )
     .on('broadcast', { event: 'timer-tick' }, ({ payload }: any) => {
       // 상대방 타이머 남은 시간 수신 (DB 없이 Broadcast로만 동기화)
-      const { userId, seconds } = payload as { userId: string; seconds: number };
+      const { userId, seconds, mode, cycleInSet, cyclesUntilLongBreak } = payload as any;
       set((s) => ({
         members: s.members.map((m) =>
           m.userId === userId
-            ? { ...m, timerSecondsLeft: seconds, timerUpdatedAt: Date.now() }
+            ? { ...m, timerSecondsLeft: seconds, timerUpdatedAt: Date.now(), timerMode: mode, cycleInSet, cyclesUntilLongBreak }
             : m
         ),
       }));
@@ -265,13 +306,13 @@ export const useRoomStore = create<RoomState>((set, get) => ({
 
   // ── broadcastTimerTick ──────────────────────────
   // DB 없이 Broadcast 채널로 타이머 남은 시간 전송
-  broadcastTimerTick: async (userId, seconds) => {
+  broadcastTimerTick: async (userId, seconds, mode, cycleInSet, cyclesUntilLongBreak) => {
     const { channel } = get();
     if (!channel) return;
     await channel.send({
       type: 'broadcast',
       event: 'timer-tick',
-      payload: { userId, seconds },
+      payload: { userId, seconds, mode, cycleInSet, cyclesUntilLongBreak },
     });
   },
 

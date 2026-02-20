@@ -1,0 +1,18 @@
+﻿
+> pomodoro-web-game@0.0.0 build
+> tsc -b && vite build
+
+src/components/room/RoomMemberCharacter.tsx(13,27): error TS2339: Property 'equippedBackground' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(13,67): error TS2339: Property 'equippedBackground' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(14,27): error TS2339: Property 'equippedAccessory' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(14,67): error TS2339: Property 'equippedAccessory' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(15,27): error TS2339: Property 'equippedSkin' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(15,67): error TS2339: Property 'equippedSkin' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(37,29): error TS2339: Property 'timerMode' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(38,29): error TS2339: Property 'timerMode' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(97,21): error TS2339: Property 'timerMode' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(97,59): error TS2339: Property 'timerMode' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(100,19): error TS2339: Property 'cyclesUntilLongBreak' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(102,44): error TS2339: Property 'cyclesUntilLongBreak' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(107,45): error TS2339: Property 'cycleInSet' does not exist on type 'RoomMember'.
+src/components/room/RoomMemberCharacter.tsx(108,41): error TS2339: Property 'cycleInSet' does not exist on type 'RoomMember'.

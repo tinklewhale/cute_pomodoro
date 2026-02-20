@@ -11,6 +11,7 @@ import { RoomView } from './components/room/RoomView';
 import { CalendarView } from './components/calendar/CalendarView';
 import { InventoryView } from './components/inventory/InventoryView';
 import { ShopView } from './components/shop/ShopView';
+import { RoomMemberCharacter } from './components/room/RoomMemberCharacter';
 import { AuthModal } from './components/auth/AuthModal';
 import { AuthPage } from './components/auth/AuthPage';
 import { playClick, playNotification } from './utils/audio';
@@ -36,7 +37,7 @@ function App() {
   const { tick, status: timerStatus, mode: timerMode, focusStartTime, focusDuration,
           advanceCycle, advanceToFocus,
           timeLeft, cycleInSet, cyclesUntilLongBreak } = useTimerStore();
-  const { roomId, broadcastTimerStatus, broadcastFocusSeconds, broadcastTimerTick } = useRoomStore();
+  const { roomId, members, isConnected, broadcastTimerStatus, broadcastFocusSeconds, broadcastTimerTick } = useRoomStore();
 
   const [tab, setTab]               = useState<Tab>('home');
   const [showShop, setShowShop]     = useState(false);
@@ -147,11 +148,15 @@ function App() {
   // ── 타이머 남은 시간 방송 (5초마다, 상대방 카드에 표시용) ──
   useEffect(() => {
     if (!roomId || timerStatus !== 'running') return;
+
+    const tickPayload = () => {
+      const state = useTimerStore.getState();
+      void broadcastTimerTick(SESSION_USER_ID, state.timeLeft, state.mode, state.cycleInSet, state.cyclesUntilLongBreak);
+    };
+
     // 시작 즉시 한 번 방송
-    void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
-    const id = setInterval(() => {
-      void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
-    }, 5_000);
+    tickPayload();
+    const id = setInterval(tickPayload, 5_000);
     return () => clearInterval(id);
   }, [roomId, timerStatus, broadcastTimerTick]);
 
@@ -304,69 +309,82 @@ function App() {
 
         {/* Left panel — Character (desktop only, sticky) */}
         <aside className="character-panel">
-          <CharacterView size={220} />
-
-          {/* Mini timer display */}
-          {timerStatus !== 'idle' && (
-            <div style={{ marginTop: 16, textAlign: 'center', width: '100%' }}>
-              {/* Time + mode */}
-              <div style={{
-                fontWeight: 900,
-                fontSize: '1.9rem',
-                color: 'var(--text-primary)',
-                lineHeight: 1,
-                fontVariantNumeric: 'tabular-nums',
-                letterSpacing: '-0.02em',
-              }}>
-                {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
-              </div>
-              <div style={{
-                fontSize: '0.72rem',
-                fontWeight: 700,
-                color: timerMode === 'focus' ? 'var(--rose)' : timerMode === 'shortBreak' ? '#5EC49A' : '#5BA8E5',
-                marginTop: 4,
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}>
-                {timerMode === 'focus' ? '집중' : timerMode === 'shortBreak' ? '짧은 휴식' : '긴 휴식'}
-                {timerStatus === 'paused' && ' · 일시정지'}
-              </div>
-              {/* Cycle dots */}
-              <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 8 }}>
-                {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
-                  <motion.div
-                    key={i}
-                    animate={{ scale: i === cycleInSet && timerStatus === 'running' ? [1, 1.35, 1] : 1 }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                    style={{
-                      width: 8, height: 8,
-                      borderRadius: '50%',
-                      background: i < cycleInSet
-                        ? (timerMode === 'focus' ? 'var(--rose)' : '#5EC49A')
-                        : 'rgba(0,0,0,0.10)',
-                      border: i < cycleInSet ? 'none' : '1.5px solid rgba(0,0,0,0.10)',
-                    }}
-                  />
-                ))}
-              </div>
+          {tab === 'room' && isConnected ? (
+            <div style={{
+              display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', alignItems: 'center',
+              width: '100%', maxHeight: '80vh', overflowY: 'auto', padding: 10
+            }}>
+              {members.map(m => (
+                <RoomMemberCharacter key={m.userId} member={m} size={members.length > 4 ? 80 : 120} />
+              ))}
             </div>
-          )}
+          ) : (
+            <>
+              <CharacterView size={220} />
 
-          <div
-            style={{
-              marginTop: timerStatus !== 'idle' ? 12 : 20,
-              padding: '8px 20px',
-              borderRadius: 'var(--radius-full)',
-              background: 'rgba(255, 255, 255, 0.6)',
-              border: '1.5px solid rgba(255, 255, 255, 0.85)',
-              fontSize: '0.82rem',
-              fontWeight: 700,
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {selectedCharacter === 'cat' ? '🐱 ' : '🦊 '}
-            {nickname}
-          </div>
+              {/* Mini timer display */}
+              {timerStatus !== 'idle' && (
+                <div style={{ marginTop: 16, textAlign: 'center', width: '100%' }}>
+                  {/* Time + mode */}
+                  <div style={{
+                    fontWeight: 900,
+                    fontSize: '1.9rem',
+                    color: 'var(--text-primary)',
+                    lineHeight: 1,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: '-0.02em',
+                  }}>
+                    {String(Math.floor(timeLeft / 60)).padStart(2, '0')}:{String(timeLeft % 60).padStart(2, '0')}
+                  </div>
+                  <div style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    color: timerMode === 'focus' ? 'var(--rose)' : timerMode === 'shortBreak' ? '#5EC49A' : '#5BA8E5',
+                    marginTop: 4,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.05em',
+                  }}>
+                    {timerMode === 'focus' ? '집중' : timerMode === 'shortBreak' ? '짧은 휴식' : '긴 휴식'}
+                    {timerStatus === 'paused' && ' · 일시정지'}
+                  </div>
+                  {/* Cycle dots */}
+                  <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginTop: 8 }}>
+                    {Array.from({ length: cyclesUntilLongBreak }).map((_, i) => (
+                      <motion.div
+                        key={i}
+                        animate={{ scale: i === cycleInSet && timerStatus === 'running' ? [1, 1.35, 1] : 1 }}
+                        transition={{ duration: 1.5, repeat: Infinity }}
+                        style={{
+                          width: 8, height: 8,
+                          borderRadius: '50%',
+                          background: i < cycleInSet
+                            ? (timerMode === 'focus' ? 'var(--rose)' : '#5EC49A')
+                            : 'rgba(0,0,0,0.10)',
+                          border: i < cycleInSet ? 'none' : '1.5px solid rgba(0,0,0,0.10)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div
+                style={{
+                  marginTop: timerStatus !== 'idle' ? 12 : 20,
+                  padding: '8px 20px',
+                  borderRadius: 'var(--radius-full)',
+                  background: 'rgba(255, 255, 255, 0.6)',
+                  border: '1.5px solid rgba(255, 255, 255, 0.85)',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  color: 'var(--text-secondary)',
+                }}
+              >
+                {selectedCharacter === 'cat' ? '🐱 ' : '🦊 '}
+                {nickname}
+              </div>
+            </>
+          )}
         </aside>
 
         {/* Right panel — Tab content */}
