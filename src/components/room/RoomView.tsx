@@ -228,9 +228,10 @@ export const RoomView: React.FC = () => {
                       {pad(Math.floor(timeLeft / 60))}:{pad(timeLeft % 60)}
                     </div>
                   )}
-                  {!isMe && member.timerStatus === 'running' && member.timerSecondsLeft > 0 && (() => {
+                  {!isMe && member.timerStatus === 'running' && (() => {
                     const secs = interpolateSeconds(member.timerSecondsLeft, member.timerUpdatedAt, member.timerStatus);
-                    return secs > 0 ? (
+                    const isInitial = member.timerSecondsLeft === 0;
+                    return (
                       <div style={{
                         position: 'absolute',
                         bottom: -7, left: '50%',
@@ -244,9 +245,9 @@ export const RoomView: React.FC = () => {
                         whiteSpace: 'nowrap',
                         boxShadow: '0 1px 4px rgba(0,0,0,0.15)',
                       }}>
-                        {pad(Math.floor(secs / 60))}:{pad(secs % 60)}
+                        {isInitial ? '--:--' : `${pad(Math.floor(secs / 60))}:${pad(secs % 60)}`}
                       </div>
-                    ) : null;
+                    );
                   })()}
                 </div>
 

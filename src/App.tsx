@@ -146,14 +146,14 @@ function App() {
 
   // ── 타이머 남은 시간 방송 (5초마다, 상대방 카드에 표시용) ──
   useEffect(() => {
-    if (!roomId || timerStatus !== 'running' || timerMode !== 'focus') return;
+    if (!roomId || timerStatus !== 'running') return;
     // 시작 즉시 한 번 방송
     void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
     const id = setInterval(() => {
       void broadcastTimerTick(SESSION_USER_ID, useTimerStore.getState().timeLeft);
     }, 5_000);
     return () => clearInterval(id);
-  }, [roomId, timerStatus, timerMode, broadcastTimerTick]);
+  }, [roomId, timerStatus, broadcastTimerTick]);
 
   const handleSignOut = async () => {
     playClick();
