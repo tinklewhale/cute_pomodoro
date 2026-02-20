@@ -4,7 +4,7 @@
 
 export type Rarity = 1 | 2 | 3; // 1★ 일반 / 2★ 레어 / 3★ 전설
 export type ItemType = 'background' | 'accessory' | 'skin' | 'character';
-export type CharacterType = 'cat' | 'fox';
+export type CharacterType = 'cat' | 'fox' | 'panda' | 'bird';
 
 export interface ItemDefinition {
   id: string;
@@ -229,6 +229,26 @@ export const ALL_ITEMS: ItemDefinition[] = [
     emoji: '🌈',
   },
 
+  // ── 1★ Characters ──────────────────────────────────────
+  {
+    id: 'char_panda',
+    nameKo: '판다',
+    type: 'character',
+    rarity: 1,
+    compatibleCharacters: 'all',
+    assetData: 'panda.png',
+    emoji: '🐼',
+  },
+  {
+    id: 'char_bird',
+    nameKo: '새',
+    type: 'character',
+    rarity: 1,
+    compatibleCharacters: 'all',
+    assetData: 'bird.png',
+    emoji: '🐦',
+  },
+
   // ── 3★ Characters ──────────────────────────────────────
   {
     id: 'char_cat',
@@ -264,12 +284,13 @@ export function rollItemBox(_character: CharacterType): ItemDefinition {
   else if (rand < 90) targetRarity = 2;
   else                targetRarity = 3;
 
-  // Character items are excluded from random gacha (obtained only via synthesis)
+  // 3★ 캐릭터(cat, fox)는 합성 전용 — 일반 가챠 제외
+  // 1★/2★ 캐릭터(panda, bird)는 일반 가챠 풀에 포함
   const pool = ALL_ITEMS.filter(
-    i => i.rarity === targetRarity && i.type !== 'character'
+    i => i.rarity === targetRarity && !(i.type === 'character' && i.rarity === 3)
   );
 
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && i.type !== 'character');
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && !(i.type === 'character' && i.rarity === 3));
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }
@@ -299,14 +320,15 @@ export function synthesizeItems(inputRarity: Rarity, _character: CharacterType):
     outputRarity = inputRarity;
   }
 
-  // 3★ synthesis has a 20% chance to yield a character item
+  // 3★ 합성 시 20% 확률로 3★ 전설 캐릭터(cat, fox) 획득
   if (outputRarity === 3 && Math.random() < 0.2) {
-    const charPool = ALL_ITEMS.filter(i => i.type === 'character');
+    const charPool = ALL_ITEMS.filter(i => i.type === 'character' && i.rarity === 3);
     return charPool[Math.floor(Math.random() * charPool.length)];
   }
 
-  const pool = ALL_ITEMS.filter(i => i.rarity === outputRarity && i.type !== 'character');
-  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && i.type !== 'character');
+  // 3★ 캐릭터는 합성 일반 풀에서 제외 (1★ 캐릭터는 포함)
+  const pool = ALL_ITEMS.filter(i => i.rarity === outputRarity && !(i.type === 'character' && i.rarity === 3));
+  const fallback = ALL_ITEMS.filter(i => i.rarity === 1 && !(i.type === 'character' && i.rarity === 3));
   const finalPool = pool.length > 0 ? pool : fallback;
   return finalPool[Math.floor(Math.random() * finalPool.length)];
 }

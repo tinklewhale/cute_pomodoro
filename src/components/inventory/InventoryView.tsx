@@ -22,10 +22,18 @@ export const InventoryView: React.FC = () => {
   const [filter, setFilter] = useState<FilterTab>('all');
   const [showCrafting, setShowCrafting] = useState(false);
 
+  // 아이템 ID → CharacterType 매핑 (신규 캐릭터 추가 시 여기만 수정)
+  const CHAR_ITEM_MAP: Record<string, CharacterType> = {
+    char_cat:   'cat',
+    char_fox:   'fox',
+    char_panda: 'panda',
+    char_bird:  'bird',
+  };
+
   // Migration: ensure the starting character item is in inventory for existing users
   useEffect(() => {
     if (!hasChosenCharacter) return;
-    const charItemId = selectedCharacter === 'cat' ? 'char_cat' : 'char_fox';
+    const charItemId = `char_${selectedCharacter}`;
     const hasCharItem = inventory.some((i) => i.definitionId === charItemId);
     if (!hasCharItem) {
       const charItem = ALL_ITEMS.find((i) => i.id === charItemId);
@@ -56,8 +64,7 @@ export const InventoryView: React.FC = () => {
 
   const isEquipped = (defId: string, type: ItemType) => {
     if (type === 'character') {
-      return (defId === 'char_cat' && selectedCharacter === 'cat') ||
-             (defId === 'char_fox' && selectedCharacter === 'fox');
+      return CHAR_ITEM_MAP[defId] === selectedCharacter;
     }
     return Object.values(equipped).includes(defId);
   };
@@ -65,8 +72,8 @@ export const InventoryView: React.FC = () => {
   const handleToggleEquip = (defId: string, type: ItemType) => {
     playClick();
     if (type === 'character') {
-      const char: CharacterType = defId === 'char_cat' ? 'cat' : 'fox';
-      if (selectedCharacter !== char) equipCharacter(char);
+      const char = CHAR_ITEM_MAP[defId];
+      if (char && selectedCharacter !== char) equipCharacter(char);
       return;
     }
     const slotKey = type === 'background' ? 'background' :
